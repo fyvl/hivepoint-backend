@@ -1,0 +1,29 @@
+name: CI
+
+on:
+    push:
+    pull_request:
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        env:
+            PORT: 3000
+            DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hivepoint?schema=public
+            JWT_ACCESS_SECRET: test
+            JWT_REFRESH_SECRET: test
+            JWT_ACCESS_TTL_SECONDS: 900
+            JWT_REFRESH_TTL_SECONDS: 2592000
+            CORS_ORIGINS: http://localhost:5173
+            COOKIE_DOMAIN: ''
+            COOKIE_SECURE: 'false'
+            REDIS_URL: redis://localhost:6379
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: npm
+            - run: npm ci
+            - run: npx prisma generate
+            - run: npm run build
