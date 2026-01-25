@@ -31,6 +31,10 @@
 $ npm install
 ```
 
+## Local setup
+
+See `docs/runbook.md` for local environment setup, Prisma migrations, and smoke tests.
+
 ## Compile and run the project
 
 ```bash
