@@ -39,6 +39,7 @@ export const envSchema = z.object({
     REDIS_URL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
     MOCK_PAYMENT_SECRET: z.string().min(1),
     API_KEY_SALT: z.string().min(1),
+    USAGE_INGEST_SECRET: z.string().min(1),
 });
 
 export type Env = z.infer<typeof envSchema>;
