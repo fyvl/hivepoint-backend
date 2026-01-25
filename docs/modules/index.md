@@ -6,4 +6,5 @@ This folder documents the HTTP-facing modules implemented in the backend. Each m
 - [Users](./users.md): Current-user lookup based on the authenticated request context.
 - [Catalog](./catalog.md): Public product browsing plus seller/admin product and version management with status-based visibility.
 - [Billing](./billing.md): Plan listing/creation and user subscription listing/cancel (no payment processing).
+- [Keys](./keys.md): API key creation, listing, and revocation for the current user.
 - [Mock payments](./payments-mock.md): Subscribe flow and mock payment endpoints guarded by a shared secret.

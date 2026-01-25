@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import { createHash, randomBytes } from 'crypto';
 
 const SALT_ROUNDS = 12;
 
@@ -16,4 +17,20 @@ export const hashToken = async (token: string): Promise<string> => {
 
 export const verifyTokenHash = async (token: string, hash: string): Promise<boolean> => {
     return bcrypt.compare(token, hash);
+};
+
+const toBase64Url = (buffer: Buffer): string => {
+    return buffer
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+};
+
+export const generateRawApiKey = (): string => {
+    return `hp_${toBase64Url(randomBytes(32))}`;
+};
+
+export const hashApiKey = (rawKey: string, salt: string): string => {
+    return createHash('sha256').update(rawKey + salt).digest('hex');
 };
