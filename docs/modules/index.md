@@ -8,4 +8,5 @@ This folder documents the HTTP-facing modules implemented in the backend. Each m
 - [Billing](./billing.md): Plan listing/creation and user subscription listing/cancel (no payment processing).
 - [Keys](./keys.md): API key creation, listing, and revocation for the current user.
 - [Usage](./usage.md): Internal usage ingestion and per-subscription usage summaries.
+- [Admin](./admin.md): Admin-only moderation actions for products, versions, and API keys.
 - [Mock payments](./payments-mock.md): Subscribe flow and mock payment endpoints guarded by a shared secret.
