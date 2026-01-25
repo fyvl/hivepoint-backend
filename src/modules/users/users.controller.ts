@@ -7,7 +7,8 @@ import {
     ApiTags,
     ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { User, AuthenticatedUser } from '../../common/decorators/user.decorator';
+import { User } from '../../common/decorators/user.decorator';
+import type { AuthenticatedUser } from '../../common/decorators/user.decorator';
 import { JwtGuard } from '../../common/guards/jwt.guard';
 import { UserMeResponseDto } from './dto/user-me.dto';
 import { UsersService } from './users.service';
