@@ -5,6 +5,7 @@ import { OpenApiModule } from './common/openapi/openapi.module';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
 
 @Module({
     imports: [
@@ -14,6 +15,7 @@ import { UsersModule } from './modules/users/users.module';
         OpenApiModule,
         AuthModule,
         UsersModule,
+        CatalogModule,
     ],
 })
 export class AppModule {}
