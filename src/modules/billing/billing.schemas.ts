@@ -15,5 +15,15 @@ export const createPlanSchema = z.object({
     isActive: z.boolean().optional(),
 });
 
+export const subscribeSchema = z.object({
+    planId: z.string().trim().min(1),
+});
+
+export const mockPaymentQuerySchema = z.object({
+    invoiceId: z.string().trim().min(1),
+});
+
 export type GetPlansQuery = z.infer<typeof getPlansQuerySchema>;
 export type CreatePlanInput = z.infer<typeof createPlanSchema>;
+export type SubscribeInput = z.infer<typeof subscribeSchema>;
+export type MockPaymentQuery = z.infer<typeof mockPaymentQuerySchema>;

@@ -1,6 +1,8 @@
-import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import {
     ApiBearerAuth,
+    ApiBody,
+    ApiConflictResponse,
     ApiForbiddenResponse,
     ApiNotFoundResponse,
     ApiOkResponse,
@@ -11,8 +13,13 @@ import {
 import { User } from '../../common/decorators/user.decorator';
 import type { AuthenticatedUser } from '../../common/decorators/user.decorator';
 import { JwtGuard } from '../../common/guards/jwt.guard';
+import { ZodValidationPipe } from '../../common/utils/zod-validation.pipe';
+import { subscribeSchema } from './billing.schemas';
+import type { SubscribeInput } from './billing.schemas';
 import { CancelSubscriptionResponseDto } from './dto/cancel-subscription-response.dto';
 import { SubscriptionListResponseDto } from './dto/list-subscriptions.dto';
+import { SubscribeDto } from './dto/subscribe.dto';
+import { SubscribeResponseDto } from './dto/subscribe-response.dto';
 import { SubscriptionsService } from './subscriptions.service';
 
 @ApiTags('billing')
@@ -30,6 +37,22 @@ export class SubscriptionsController {
         @User() user: AuthenticatedUser,
     ): Promise<SubscriptionListResponseDto> {
         return this.subscriptionsService.listUserSubscriptions(user);
+    }
+
+    @Post('subscribe')
+    @UseGuards(JwtGuard)
+    @ApiBearerAuth('bearer')
+    @ApiOperation({ summary: 'Subscribe to plan' })
+    @ApiBody({ type: SubscribeDto })
+    @ApiOkResponse({ type: SubscribeResponseDto })
+    @ApiNotFoundResponse({ description: 'PLAN_NOT_FOUND or PRODUCT_NOT_FOUND' })
+    @ApiConflictResponse({ description: 'ALREADY_SUBSCRIBED or SUBSCRIPTION_PENDING' })
+    @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
+    async subscribe(
+        @Body(new ZodValidationPipe(subscribeSchema)) body: SubscribeInput,
+        @User() user: AuthenticatedUser,
+    ): Promise<SubscribeResponseDto> {
+        return this.subscriptionsService.subscribe(body.planId, user);
     }
 
     @Post('subscriptions/:id/cancel')

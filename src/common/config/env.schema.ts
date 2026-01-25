@@ -37,6 +37,7 @@ export const envSchema = z.object({
     COOKIE_DOMAIN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
     COOKIE_SECURE: booleanFromString.default(false),
     REDIS_URL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+    MOCK_PAYMENT_SECRET: z.string().min(1),
 });
 
 export type Env = z.infer<typeof envSchema>;
