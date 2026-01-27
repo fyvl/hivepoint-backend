@@ -5,10 +5,10 @@ import { AppModule } from './app.module';
 import { AppConfigService } from './common/config/config.service';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { OpenApiService } from './common/openapi/openapi.service';
-import { PrismaService } from './common/prisma/prisma.service';
 
 async function bootstrap(): Promise<void> {
     const app = await NestFactory.create(AppModule);
+    app.enableShutdownHooks();
 
     const configService = app.get(AppConfigService);
 
@@ -32,9 +32,6 @@ async function bootstrap(): Promise<void> {
 
     const openApiService = app.get(OpenApiService);
     openApiService.setDocument(document);
-
-    const prismaService = app.get(PrismaService);
-    await prismaService.enableShutdownHooks(app);
 
     await app.listen(configService.port);
 }
