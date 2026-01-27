@@ -27,6 +27,10 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Status
+
+MVP backend is implemented and running locally. CI runs lint, unit tests, and e2e tests on push and pull requests.
+
 ## Project setup
 
 ```bash
@@ -39,10 +43,11 @@ See `docs/runbook.md` for local environment setup, Prisma migrations, and smoke 
 
 ## Documentation
 
-- `docs/runbook.md` — local setup and smoke tests
-- `docs/project-overview.md` — project overview and architecture notes
-- `docs/diagrams.md` — Mermaid flow diagrams
-- `docs/testing.md` — test database and commands
+- `docs/runbook.md` - local setup and smoke tests
+- `docs/project-overview.md` - project overview and architecture notes
+- `docs/diagrams.md` - Mermaid flow diagrams
+- `docs/testing.md` - test database and commands
+- `docs/release-notes.md` - MVP scope and known limitations
 
 ## Compile and run the project
 
@@ -76,9 +81,9 @@ $ npm run test:cov
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+When you're ready to deploy your NestJS application to production, there are some key actions you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple actions:
 
 ```bash
 $ npm install -g @nestjs/mau
@@ -113,3 +118,4 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
