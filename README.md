@@ -35,6 +35,13 @@ $ npm install
 
 See `docs/runbook.md` for local environment setup, Prisma migrations, and smoke tests.
 
+## Documentation
+
+- `docs/runbook.md` — local setup and smoke tests
+- `docs/project-overview.md` — project overview and architecture notes
+- `docs/diagrams.md` — Mermaid flow diagrams
+- `docs/testing.md` — test database and commands
+
 ## Compile and run the project
 
 ```bash

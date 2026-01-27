@@ -15,3 +15,5 @@ These values are validated by `env.schema.ts` at startup.
 | `COOKIE_SECURE` | Optional (default false) | `false` | Refresh cookie `secure` flag in `AuthController`. |
 | `REDIS_URL` | Optional | `redis://localhost:6379` | Not used in code yet. |
 | `MOCK_PAYMENT_SECRET` | Required | `change-me` | Mock payment guard header validation. |
+| `API_KEY_SALT` | Required | `change-me` | API key hashing in `KeysService`. |
+| `USAGE_INGEST_SECRET` | Required | `change-me` | Usage ingest header validation in `UsageService`. |
