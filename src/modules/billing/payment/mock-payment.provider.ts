@@ -7,14 +7,14 @@ import type { PaymentProvider } from './payment.provider';
 export class MockPaymentProvider implements PaymentProvider {
     constructor(private readonly configService: ConfigService<Env, true>) {}
 
-    async createPayment(params: {
+    createPayment(params: {
         invoiceId: string;
         amountCents: number;
         currency: string;
     }): Promise<{ paymentLink: string }> {
-        const port = this.configService.getOrThrow('PORT');
-        return {
+        const port = this.configService.getOrThrow<number>('PORT');
+        return Promise.resolve({
             paymentLink: `http://localhost:${port}/billing/mock/pay?invoiceId=${params.invoiceId}`,
-        };
+        });
     }
 }

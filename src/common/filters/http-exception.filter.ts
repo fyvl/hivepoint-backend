@@ -23,7 +23,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         const ctx = host.switchToHttp();
         const response = ctx.getResponse<Response>();
 
-        let status = HttpStatus.INTERNAL_SERVER_ERROR;
+        let status: HttpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
         let code: string = ErrorCodes.INTERNAL_ERROR;
         let message = 'Internal server error';
         let details: unknown;
@@ -34,7 +34,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
             message = exception.message;
             details = exception.details;
         } else if (exception instanceof HttpException) {
-            status = exception.getStatus();
+            status = exception.getStatus() as HttpStatus;
             code = this.mapHttpStatusToCode(status);
 
             const responseBody = exception.getResponse();
@@ -78,7 +78,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         response.status(status).json(body);
     }
 
-    private mapHttpStatusToCode(status: number): string {
+    private mapHttpStatusToCode(status: HttpStatus): string {
         switch (status) {
             case HttpStatus.BAD_REQUEST:
                 return ErrorCodes.BAD_REQUEST;
@@ -93,7 +93,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
             case HttpStatus.UNPROCESSABLE_ENTITY:
                 return ErrorCodes.VALIDATION_ERROR;
             default:
-                return status >= 500 ? ErrorCodes.INTERNAL_ERROR : ErrorCodes.HTTP_ERROR;
+                return Number(status) >= 500
+                    ? ErrorCodes.INTERNAL_ERROR
+                    : ErrorCodes.HTTP_ERROR;
         }
     }
 }

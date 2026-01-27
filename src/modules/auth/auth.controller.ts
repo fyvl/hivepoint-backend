@@ -61,7 +61,7 @@ export class AuthController {
         @Req() request: Request,
         @Res({ passthrough: true }) response: Response,
     ): Promise<AccessTokenResponseDto> {
-        const refreshToken = request.cookies?.refreshToken;
+        const refreshToken = this.getRefreshTokenFromCookies(request);
         const result = await this.authService.refresh(refreshToken);
 
         this.setRefreshCookie(response, result.refreshToken);
@@ -76,7 +76,7 @@ export class AuthController {
         @Req() request: Request,
         @Res({ passthrough: true }) response: Response,
     ): Promise<LogoutResponseDto> {
-        const refreshToken = request.cookies?.refreshToken;
+        const refreshToken = this.getRefreshTokenFromCookies(request);
         await this.authService.logout(refreshToken);
 
         response.clearCookie('refreshToken', this.getRefreshCookieOptions());
@@ -106,5 +106,11 @@ export class AuthController {
             path: '/',
             maxAge: this.configService.jwtRefreshTtlSeconds * 1000,
         };
+    }
+
+    private getRefreshTokenFromCookies(request: Request): string | undefined {
+        const cookies = request.cookies as { refreshToken?: unknown } | undefined;
+        const token = cookies?.refreshToken;
+        return typeof token === 'string' ? token : undefined;
     }
 }

@@ -21,7 +21,7 @@ export class UsageService {
         input: RecordUsageInput,
         providedSecret?: string,
     ): Promise<RecordUsageResponseDto> {
-        const secret = this.configService.getOrThrow('USAGE_INGEST_SECRET');
+        const secret = this.configService.getOrThrow<string>('USAGE_INGEST_SECRET');
         if (!providedSecret || providedSecret !== secret) {
             throw new AppError({
                 code: ErrorCodes.USAGE_INGEST_FORBIDDEN,

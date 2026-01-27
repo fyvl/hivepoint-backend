@@ -21,7 +21,7 @@ export class KeysService {
 
     async createKey(input: CreateKeyInput, user: AuthenticatedUser): Promise<CreateKeyResponseDto> {
         const rawKey = generateRawApiKey();
-        const salt = this.configService.getOrThrow('API_KEY_SALT');
+        const salt = this.configService.getOrThrow<string>('API_KEY_SALT');
         const keyHash = hashApiKey(rawKey, salt);
 
         const apiKey = await this.prisma.apiKey.create({

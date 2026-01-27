@@ -11,10 +11,15 @@ export class MockPaymentGuard implements CanActivate {
 
     canActivate(context: ExecutionContext): boolean {
         const request = context.switchToHttp().getRequest<Request>();
-        const provided = request.headers['x-mock-payment-secret'];
-        const secret = this.configService.getOrThrow('MOCK_PAYMENT_SECRET');
+        const headers = request.headers as Record<string, string | string[] | undefined>;
+        const provided = headers['x-mock-payment-secret'];
+        const secret = this.configService.getOrThrow<string>('MOCK_PAYMENT_SECRET');
 
-        const value = Array.isArray(provided) ? provided[0] : provided;
+        const value = Array.isArray(provided)
+            ? provided[0]
+            : typeof provided === 'string'
+                ? provided
+                : undefined;
         if (!value || value !== secret) {
             throw new AppError({
                 code: ErrorCodes.MOCK_PAYMENT_FORBIDDEN,
