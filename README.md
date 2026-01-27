@@ -4,6 +4,8 @@
 
 [circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
 [circleci-url]: https://circleci.com/gh/nestjs/nest
+[ci-badge]: https://github.com/fyvl/hivepoint-backend/actions/workflows/ci.yml/badge.svg
+[ci-url]: https://github.com/fyvl/hivepoint-backend/actions/workflows/ci.yml
 
   <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
     <p align="center">
@@ -67,6 +69,10 @@ $ npm run test:e2e
 # test coverage
 $ npm run test:cov
 ```
+
+## CI
+
+[![CI][ci-badge]][ci-url] CI runs on push and pull requests via GitHub Actions.
 
 ## Deployment
 
