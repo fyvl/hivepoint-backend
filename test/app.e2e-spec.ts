@@ -38,17 +38,21 @@ describe('E2E flows', () => {
         await prisma.$disconnect();
     });
 
-    const registerUser = async (email: string, password = DEFAULT_PASSWORD) => {
+    const registerUser = async (
+        email: string,
+        password = DEFAULT_PASSWORD,
+        role: Role = Role.BUYER,
+    ) => {
         const response = await request(app.getHttpServer())
             .post('/auth/register')
-            .send({ email, password })
+            .send({ email, password, role })
             .expect(201);
 
         expect(response.body).toEqual(
             expect.objectContaining({
                 id: expect.any(String),
                 email,
-                role: Role.BUYER,
+                role,
             }),
         );
 
@@ -73,11 +77,7 @@ describe('E2E flows', () => {
 
     const createSellerAndPlan = async () => {
         const sellerEmail = uniqueEmail('seller');
-        const seller = await registerUser(sellerEmail);
-        await prisma.user.update({
-            where: { id: seller.id },
-            data: { role: Role.SELLER },
-        });
+        const seller = await registerUser(sellerEmail, DEFAULT_PASSWORD, Role.SELLER);
 
         const { accessToken: sellerToken } = await loginUser(sellerEmail);
 
@@ -152,13 +152,55 @@ describe('E2E flows', () => {
             .expect({ ok: true });
     });
 
+    it('buyer can upgrade to seller via users role endpoint', async () => {
+        const email = uniqueEmail('buyer');
+        const registered = await registerUser(email);
+        const { accessToken } = await loginUser(email);
+
+        await request(app.getHttpServer())
+            .post('/catalog/products')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send({
+                title: 'Blocked API',
+                description: 'This should fail for buyer before role upgrade.',
+                category: 'security',
+                tags: ['blocked'],
+            })
+            .expect(403);
+
+        const roleResponse = await request(app.getHttpServer())
+            .post('/users/role')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send({ role: Role.SELLER })
+            .expect(201);
+
+        expect(roleResponse.body).toEqual(
+            expect.objectContaining({
+                id: registered.id,
+                email,
+                role: Role.SELLER,
+            }),
+        );
+
+        const { accessToken: sellerToken } = await loginUser(email);
+
+        const productResponse = await request(app.getHttpServer())
+            .post('/catalog/products')
+            .set('Authorization', `Bearer ${sellerToken}`)
+            .send({
+                title: 'Seller API',
+                description: 'Role-upgraded user can now create products.',
+                category: 'security',
+                tags: ['seller'],
+            })
+            .expect(201);
+
+        expect(productResponse.body.ownerId).toBe(registered.id);
+    });
+
     it('seller flow: create product -> create plan', async () => {
         const sellerEmail = uniqueEmail('seller');
-        const seller = await registerUser(sellerEmail);
-        await prisma.user.update({
-            where: { id: seller.id },
-            data: { role: Role.SELLER },
-        });
+        const seller = await registerUser(sellerEmail, DEFAULT_PASSWORD, Role.SELLER);
 
         const { accessToken: sellerToken } = await loginUser(sellerEmail);
 

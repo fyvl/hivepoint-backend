@@ -27,7 +27,7 @@ All API errors are returned in a unified format:
 | `VERSION_NOT_FOUND` | 404 | Catalog versions service. |
 | `VERSION_ALREADY_EXISTS` | 409 | Catalog versions service. |
 | `NOT_OWNER` | 403 | Catalog products/versions services; Billing plans and subscriptions services. |
-| `FORBIDDEN_ROLE` | 403 | Billing plans service role check. |
+| `FORBIDDEN_ROLE` | 403 | Billing plans service role check; Users self-service role change transition validation. |
 | `PLAN_NOT_FOUND` | 404 | Billing subscriptions service (subscribe flow). |
 | `PLAN_INACTIVE` | 400 | Billing subscriptions service (subscribe flow). |
 | `ALREADY_SUBSCRIBED` | 409 | Billing subscriptions service (subscribe flow). |

@@ -11,6 +11,7 @@ import { AppConfigService } from '../../common/config/config.service';
 import { ZodValidationPipe } from '../../common/utils/zod-validation.pipe';
 import { AuthService } from './auth.service';
 import { loginSchema, registerSchema } from './auth.schemas';
+import type { RegisterInput } from './auth.schemas';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import {
@@ -32,7 +33,7 @@ export class AuthController {
     @ApiBody({ type: RegisterDto })
     @ApiOkResponse({ type: AuthUserResponseDto })
     async register(
-        @Body(new ZodValidationPipe(registerSchema)) body: RegisterDto,
+        @Body(new ZodValidationPipe(registerSchema)) body: RegisterInput,
     ): Promise<AuthUserResponseDto> {
         return this.authService.register(body);
     }

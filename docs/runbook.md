@@ -48,12 +48,24 @@ docker compose down -v
 ```bash
 npx prisma generate
 npx prisma migrate dev
+npm run db:seed
 ```
 
 Optional DB UI:
 ```bash
 npx prisma studio
 ```
+
+### Seeded demo data
+`npm run db:seed` adds demo catalog entries with published products, versions, and plans.
+
+Seeded seller accounts:
+- `seller.integrations@hivepoint.dev`
+- `seller.platform@hivepoint.dev`
+- `seller.ai@hivepoint.dev`
+
+Default password for newly created seeded users:
+- `Password123!`
 
 ## Run the app
 ```bash
@@ -76,7 +88,14 @@ Register:
 ```bash
 curl -s -X POST "$BASE_URL/auth/register" \
   -H "Content-Type: application/json" \
-  -d '{"email":"buyer@example.com","password":"password123"}'
+  -d '{"email":"buyer@example.com","password":"password123","role":"BUYER"}'
+```
+
+Register as dev/seller:
+```bash
+curl -s -X POST "$BASE_URL/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"seller@example.com","password":"password123","role":"SELLER"}'
 ```
 
 Login (save cookies + access token):
@@ -102,18 +121,27 @@ Logout:
 curl -s -b cookies.txt -X POST "$BASE_URL/auth/logout"
 ```
 
-### 2) Promote a user to SELLER/ADMIN
-No API endpoint exists for role changes. Use Prisma Studio or SQL.
+### 2) Promote a user to ADMIN
+`SELLER` can be selected during registration or upgraded from BUYER via API. No API endpoint exists for setting `ADMIN`; use Prisma Studio or SQL.
+
+Upgrade BUYER -> SELLER (self-service):
+```bash
+curl -s -X POST "$BASE_URL/users/role" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"role":"SELLER"}'
+```
+Then refresh or login again to get a new access token with `SELLER` role claim.
 
 Prisma Studio:
 ```bash
 npx prisma studio
 ```
-Update `User.role` to `SELLER` or `ADMIN`.
+Update `User.role` to `ADMIN`.
 
 SQL example:
 ```sql
-UPDATE "User" SET role = 'SELLER' WHERE email = 'buyer@example.com';
+UPDATE "User" SET role = 'ADMIN' WHERE email = 'buyer@example.com';
 ```
 
 ### 3) Catalog

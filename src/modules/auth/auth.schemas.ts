@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const registerRoleSchema = z.enum(['BUYER', 'SELLER']);
+
 export const registerSchema = z.object({
     email: z
         .string()
@@ -7,6 +9,7 @@ export const registerSchema = z.object({
         .toLowerCase()
         .email(),
     password: z.string().min(8),
+    role: registerRoleSchema.default('BUYER'),
 });
 
 export const loginSchema = z.object({
@@ -18,5 +21,6 @@ export const loginSchema = z.object({
     password: z.string().min(1),
 });
 
-export type RegisterInput = z.infer<typeof registerSchema>;
+export type RegisterInput = z.input<typeof registerSchema>;
+export type RegisterParsedInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

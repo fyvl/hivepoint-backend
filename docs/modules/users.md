@@ -7,6 +7,7 @@ Provides access to the authenticated user's basic profile.
 | Method | Path | Auth | Request DTO | Response | Notes |
 | --- | --- | --- | --- | --- | --- |
 | GET | `/users/me` | Bearer | None | `UserMeResponseDto` | Uses `request.user` set by `JwtGuard`. |
+| POST | `/users/role` | Bearer | `UpdateUserRoleDto` | `UserMeResponseDto` | Self-service role upgrade (`BUYER -> SELLER`) only. |
 
 ## Response fields
 `UserMeResponseDto` includes only `id`, `email`, and `role`.
@@ -14,6 +15,7 @@ Provides access to the authenticated user's basic profile.
 ## Error codes
 - `UNAUTHORIZED`
 - `NOT_FOUND` (message `USER_NOT_FOUND`)
+- `FORBIDDEN_ROLE` (invalid self-service transition)
 
 ## Example
 Response:

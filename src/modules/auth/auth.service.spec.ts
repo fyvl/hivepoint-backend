@@ -50,10 +50,40 @@ describe('AuthService', () => {
         });
 
         const createArgs = prisma.user.create.mock.calls[0][0];
+        expect(createArgs.data.role).toBe(Role.BUYER);
         expect(createArgs.data.passwordHash).not.toBe('password123');
         await expect(
             verifyPassword('password123', createArgs.data.passwordHash),
         ).resolves.toBe(true);
+    });
+
+    it('register supports SELLER role selection', async () => {
+        const prisma = createPrismaMock();
+        const configService = createConfigService();
+        const service = new AuthService(prisma as any, configService);
+
+        prisma.user.findUnique.mockResolvedValue(null);
+        prisma.user.create.mockImplementation(async ({ data }) => ({
+            id: 'seller-id',
+            email: data.email,
+            role: data.role,
+            passwordHash: data.passwordHash,
+        }));
+
+        const result = await service.register({
+            email: 'seller@example.com',
+            password: 'password123',
+            role: Role.SELLER,
+        });
+
+        expect(result).toEqual({
+            id: 'seller-id',
+            email: 'seller@example.com',
+            role: Role.SELLER,
+        });
+
+        const createArgs = prisma.user.create.mock.calls[0][0];
+        expect(createArgs.data.role).toBe(Role.SELLER);
     });
 
     it('login returns access token and refresh token', async () => {

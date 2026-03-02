@@ -7,7 +7,13 @@ import { AppError } from '../../common/errors/app.error';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { hashPassword, hashToken, verifyPassword, verifyTokenHash } from '../../common/utils/crypto';
-import { LoginInput, RegisterInput, loginSchema, registerSchema } from './auth.schemas';
+import {
+    LoginInput,
+    RegisterInput,
+    RegisterParsedInput,
+    loginSchema,
+    registerSchema,
+} from './auth.schemas';
 
 interface AccessTokenPayload {
     sub: string;
@@ -59,6 +65,7 @@ export class AuthService {
             data: {
                 email: data.email,
                 passwordHash,
+                role: data.role,
             },
         });
 
@@ -225,7 +232,7 @@ export class AuthService {
         }
     }
 
-    private parseRegister(input: RegisterInput): RegisterInput {
+    private parseRegister(input: RegisterInput): RegisterParsedInput {
         const result = registerSchema.safeParse(input);
         if (!result.success) {
             throw new AppError({
