@@ -111,6 +111,11 @@ ACCESS_TOKEN=... # from login response
 curl -s "$BASE_URL/users/me" -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
+Profile summary:
+```bash
+curl -s "$BASE_URL/users/profile-summary" -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
 Refresh:
 ```bash
 curl -s -b cookies.txt -X POST "$BASE_URL/auth/refresh"
@@ -119,6 +124,14 @@ curl -s -b cookies.txt -X POST "$BASE_URL/auth/refresh"
 Logout:
 ```bash
 curl -s -b cookies.txt -X POST "$BASE_URL/auth/logout"
+```
+
+Change password:
+```bash
+curl -s -X POST "$BASE_URL/users/change-password" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"currentPassword":"password123","newPassword":"password1234"}'
 ```
 
 ### 2) Promote a user to ADMIN

@@ -152,6 +152,75 @@ describe('E2E flows', () => {
             .expect({ ok: true });
     });
 
+    it('profile flow: summary and password change', async () => {
+        const email = uniqueEmail('buyer');
+        await registerUser(email);
+
+        const { accessToken, cookies } = await loginUser(email);
+
+        await request(app.getHttpServer())
+            .post('/keys')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send({ label: 'Profile key' })
+            .expect(201);
+
+        const summaryResponse = await request(app.getHttpServer())
+            .get('/users/profile-summary')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .expect(200);
+
+        expect(summaryResponse.body).toEqual(
+            expect.objectContaining({
+                subscriptionsTotal: 0,
+                subscriptionsActive: 0,
+                apiKeysActive: 1,
+                productsTotal: 0,
+                productsPublished: 0,
+                canUpgradeToSeller: true,
+            }),
+        );
+
+        await request(app.getHttpServer())
+            .post('/users/change-password')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send({
+                currentPassword: 'wrong-password',
+                newPassword: 'newpassword123',
+            })
+            .expect(401);
+
+        await request(app.getHttpServer())
+            .post('/users/change-password')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send({
+                currentPassword: DEFAULT_PASSWORD,
+                newPassword: DEFAULT_PASSWORD,
+            })
+            .expect(400);
+
+        await request(app.getHttpServer())
+            .post('/users/change-password')
+            .set('Authorization', `Bearer ${accessToken}`)
+            .send({
+                currentPassword: DEFAULT_PASSWORD,
+                newPassword: 'newpassword123',
+            })
+            .expect(201)
+            .expect({ ok: true });
+
+        await request(app.getHttpServer())
+            .post('/auth/refresh')
+            .set('Cookie', cookies)
+            .expect(401);
+
+        await request(app.getHttpServer())
+            .post('/auth/login')
+            .send({ email, password: DEFAULT_PASSWORD })
+            .expect(401);
+
+        await loginUser(email, 'newpassword123');
+    });
+
     it('buyer can upgrade to seller via users role endpoint', async () => {
         const email = uniqueEmail('buyer');
         const registered = await registerUser(email);
