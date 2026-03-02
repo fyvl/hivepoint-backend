@@ -66,6 +66,47 @@ export class ProductsService {
         };
     }
 
+    async listManagedProducts(
+        params: ListProductsQuery & { limit: number; offset: number; ownerId?: string },
+    ): Promise<ProductListResponseDto> {
+        const where: Prisma.ApiProductWhereInput = {};
+
+        if (params.ownerId) {
+            where.ownerId = params.ownerId;
+        }
+
+        if (params.search) {
+            where.title = {
+                contains: params.search,
+                mode: 'insensitive',
+            };
+        }
+
+        if (params.category) {
+            where.category = params.category;
+        }
+
+        const [items, total] = await Promise.all([
+            this.prisma.apiProduct.findMany({
+                where,
+                skip: params.offset,
+                take: params.limit,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                select: productSelect,
+            }),
+            this.prisma.apiProduct.count({ where }),
+        ]);
+
+        return {
+            items,
+            total,
+            limit: params.limit,
+            offset: params.offset,
+        };
+    }
+
     async getProductById(id: string, user?: AuthenticatedUser): Promise<ProductDto> {
         const product = await this.prisma.apiProduct.findUnique({
             where: { id },

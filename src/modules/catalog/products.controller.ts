@@ -68,6 +68,33 @@ export class ProductsController {
         });
     }
 
+    @Get('my-products')
+    @UseGuards(JwtGuard, RolesGuard)
+    @Roles(Role.SELLER, Role.ADMIN)
+    @ApiBearerAuth('bearer')
+    @ApiOperation({ summary: 'List current seller products (all statuses)' })
+    @ApiOkResponse({ type: ProductListResponseDto })
+    @ApiQuery({ name: 'search', required: false, type: String })
+    @ApiQuery({ name: 'category', required: false, type: String })
+    @ApiQuery({ name: 'limit', required: false, type: Number })
+    @ApiQuery({ name: 'offset', required: false, type: Number })
+    @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
+    @ApiForbiddenResponse({ description: 'FORBIDDEN' })
+    async listMyProducts(
+        @Query(new ZodValidationPipe(listProductsQuerySchema)) query: ListProductsQuery,
+        @User() user: AuthenticatedUser,
+    ): Promise<ProductListResponseDto> {
+        const limit = Math.min(query.limit ?? 20, 100);
+        const offset = query.offset ?? 0;
+
+        return this.productsService.listManagedProducts({
+            ...query,
+            limit,
+            offset,
+            ownerId: user.role === Role.ADMIN ? undefined : user.id,
+        });
+    }
+
     @Get('products/:id')
     @UseGuards(OptionalJwtGuard)
     @ApiOperation({ summary: 'Get product by id' })

@@ -301,6 +301,51 @@ describe('E2E flows', () => {
         expect(planResponse.body.productId).toBe(productResponse.body.id);
     });
 
+    it('seller catalog scope: my-products returns only current seller products', async () => {
+        const sellerAEmail = uniqueEmail('seller-a');
+        const sellerA = await registerUser(sellerAEmail, DEFAULT_PASSWORD, Role.SELLER);
+        const { accessToken: sellerAToken } = await loginUser(sellerAEmail);
+
+        const sellerBEmail = uniqueEmail('seller-b');
+        const sellerB = await registerUser(sellerBEmail, DEFAULT_PASSWORD, Role.SELLER);
+        const { accessToken: sellerBToken } = await loginUser(sellerBEmail);
+
+        await request(app.getHttpServer())
+            .post('/catalog/products')
+            .set('Authorization', `Bearer ${sellerAToken}`)
+            .send({
+                title: 'Seller A API',
+                description: 'Owned by seller A and should appear only in A workspace.',
+                category: 'testing',
+                tags: ['a'],
+            })
+            .expect(201);
+
+        await request(app.getHttpServer())
+            .post('/catalog/products')
+            .set('Authorization', `Bearer ${sellerBToken}`)
+            .send({
+                title: 'Seller B API',
+                description: 'Owned by seller B and should not appear in A workspace.',
+                category: 'testing',
+                tags: ['b'],
+            })
+            .expect(201);
+
+        const myProductsResponse = await request(app.getHttpServer())
+            .get('/catalog/my-products')
+            .set('Authorization', `Bearer ${sellerAToken}`)
+            .expect(200);
+
+        expect(myProductsResponse.body.items).toHaveLength(1);
+        expect(myProductsResponse.body.items[0]).toEqual(
+            expect.objectContaining({
+                ownerId: sellerA.id,
+                title: 'Seller A API',
+            }),
+        );
+    });
+
     it('buyer flow: subscribe -> mock succeed -> list subscriptions ACTIVE', async () => {
         const { plan } = await createSellerAndPlan();
 

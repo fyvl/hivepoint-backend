@@ -21,6 +21,7 @@ All seller/admin endpoints require `JwtGuard` + `RolesGuard` with `SELLER` or `A
 
 | Method | Path | Auth | Request DTO | Response | Notes |
 | --- | --- | --- | --- | --- | --- |
+| GET | `/catalog/my-products` | Bearer + Roles | Query: `search`, `category`, `limit`, `offset` | `ProductListResponseDto` | `SELLER` sees only own products across all statuses; `ADMIN` sees all products. |
 | POST | `/catalog/products` | Bearer + Roles | `CreateProductDto` | `ProductDto` | Creates `DRAFT` product owned by current user. |
 | PATCH | `/catalog/products/:id` | Bearer + Roles | `UpdateProductDto` | `ProductDto` | Owner/admin only; validates status transitions. |
 | POST | `/catalog/products/:id/versions` | Bearer + Roles | `CreateVersionDto` | `VersionDto` | Owner/admin only; `version` must be unique per product. |
