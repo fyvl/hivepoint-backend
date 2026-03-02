@@ -21,7 +21,7 @@ All API errors are returned in a unified format:
 | `FORBIDDEN` | 403 | `RolesGuard`; `HttpExceptionFilter` mapping for `HttpException` 403. |
 | `NOT_FOUND` | 404 | `UsersService` (message `USER_NOT_FOUND`); `HttpExceptionFilter` mapping for `HttpException` 404. |
 | `CONFLICT` | 409 | `AuthService` register conflict (message `EMAIL_ALREADY_EXISTS`); `HttpExceptionFilter` mapping for `HttpException` 409. |
-| `VALIDATION_ERROR` | 400 | `ZodValidationPipe`, `AuthService` input validation, catalog status transition validation; mapped from 422 by `HttpExceptionFilter`. |
+| `VALIDATION_ERROR` | 400 | `ZodValidationPipe`, `AuthService` input validation, catalog status transition validation, OpenAPI fetch validation (`OPENAPI_FETCH_FAILED`); mapped from 422 by `HttpExceptionFilter`. |
 | `PRODUCT_NOT_FOUND` | 404 | Catalog products/versions services, Billing plans/subscriptions services. |
 | `PRODUCT_NOT_PUBLIC` | 403 | Catalog products/versions services for unpublished products. |
 | `VERSION_NOT_FOUND` | 404 | Catalog versions service. |

@@ -8,6 +8,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import type { CreateVersionInput, UpdateVersionInput } from './catalog.schemas';
 import { VersionDto } from './dto/version.dto';
 import { VersionListResponseDto } from './dto/list-versions.dto';
+import { VersionSchemaDto } from './dto/version-schema.dto';
 
 const versionSelect = {
     id: true,
@@ -17,6 +18,9 @@ const versionSelect = {
     openApiUrl: true,
     createdAt: true,
 } as const;
+
+const OPENAPI_FETCH_TIMEOUT_MS = 15000;
+const OPENAPI_MAX_SIZE_BYTES = 2_000_000;
 
 @Injectable()
 export class VersionsService {
@@ -126,11 +130,15 @@ export class VersionsService {
             });
         }
 
+        const openApiSnapshot = await this.fetchOpenApiSnapshot(input.openApiUrl);
+
         return this.prisma.apiVersion.create({
             data: {
                 productId,
                 version: input.version,
                 openApiUrl: input.openApiUrl,
+                openApiSnapshot,
+                openApiFetchedAt: new Date(),
                 status: VersionStatus.DRAFT,
             },
             select: versionSelect,
@@ -186,7 +194,10 @@ export class VersionsService {
         }
 
         if (input.openApiUrl !== undefined) {
+            const openApiSnapshot = await this.fetchOpenApiSnapshot(input.openApiUrl);
             data.openApiUrl = input.openApiUrl;
+            data.openApiSnapshot = openApiSnapshot;
+            data.openApiFetchedAt = new Date();
         }
 
         return this.prisma.apiVersion.update({
@@ -194,6 +205,76 @@ export class VersionsService {
             data,
             select: versionSelect,
         });
+    }
+
+    async getVersionSchema(
+        versionId: string,
+        user?: AuthenticatedUser,
+    ): Promise<VersionSchemaDto> {
+        const version = await this.prisma.apiVersion.findUnique({
+            where: { id: versionId },
+            select: {
+                id: true,
+                productId: true,
+                version: true,
+                status: true,
+                openApiUrl: true,
+                openApiSnapshot: true,
+                openApiFetchedAt: true,
+                product: {
+                    select: {
+                        ownerId: true,
+                        status: true,
+                    },
+                },
+            },
+        });
+
+        if (!version) {
+            throw new AppError({
+                code: ErrorCodes.VERSION_NOT_FOUND,
+                message: 'VERSION_NOT_FOUND',
+                httpStatus: 404,
+            });
+        }
+
+        const isOwnerAdmin = this.isOwnerOrAdmin(version.product, user);
+        const isPublic =
+            version.product.status === ProductStatus.PUBLISHED &&
+            version.status === VersionStatus.PUBLISHED;
+
+        if (!isPublic && !isOwnerAdmin) {
+            if (!user) {
+                throw new AppError({
+                    code: ErrorCodes.PRODUCT_NOT_PUBLIC,
+                    message: 'PRODUCT_NOT_PUBLIC',
+                    httpStatus: 403,
+                });
+            }
+
+            throw new AppError({
+                code: ErrorCodes.NOT_OWNER,
+                message: 'NOT_OWNER',
+                httpStatus: 403,
+            });
+        }
+
+        if (!version.openApiSnapshot) {
+            throw new AppError({
+                code: ErrorCodes.NOT_FOUND,
+                message: 'OPENAPI_SCHEMA_NOT_AVAILABLE',
+                httpStatus: 404,
+            });
+        }
+
+        return {
+            versionId: version.id,
+            productId: version.productId,
+            version: version.version,
+            openApiUrl: version.openApiUrl,
+            fetchedAt: version.openApiFetchedAt ?? null,
+            schema: version.openApiSnapshot,
+        };
     }
 
     private isOwnerOrAdmin(
@@ -224,5 +305,80 @@ export class VersionsService {
         }
 
         return false;
+    }
+
+    private async fetchOpenApiSnapshot(openApiUrl: string): Promise<string> {
+        const abortController = new AbortController();
+        const timeout = setTimeout(() => abortController.abort(), OPENAPI_FETCH_TIMEOUT_MS);
+
+        try {
+            const response = await fetch(openApiUrl, {
+                method: 'GET',
+                signal: abortController.signal,
+                headers: {
+                    Accept: 'application/json, application/yaml, text/yaml, text/plain;q=0.8, */*;q=0.1',
+                },
+            });
+
+            if (!response.ok) {
+                throw new AppError({
+                    code: ErrorCodes.VALIDATION_ERROR,
+                    message: 'OPENAPI_FETCH_FAILED',
+                    httpStatus: 400,
+                    details: {
+                        reason: 'HTTP_ERROR',
+                        status: response.status,
+                        url: openApiUrl,
+                    },
+                });
+            }
+
+            const body = await response.text();
+            const trimmed = body.trim();
+            if (!trimmed) {
+                throw new AppError({
+                    code: ErrorCodes.VALIDATION_ERROR,
+                    message: 'OPENAPI_FETCH_FAILED',
+                    httpStatus: 400,
+                    details: {
+                        reason: 'EMPTY_BODY',
+                        url: openApiUrl,
+                    },
+                });
+            }
+
+            const sizeBytes = Buffer.byteLength(body, 'utf8');
+            if (sizeBytes > OPENAPI_MAX_SIZE_BYTES) {
+                throw new AppError({
+                    code: ErrorCodes.VALIDATION_ERROR,
+                    message: 'OPENAPI_FETCH_FAILED',
+                    httpStatus: 400,
+                    details: {
+                        reason: 'TOO_LARGE',
+                        limitBytes: OPENAPI_MAX_SIZE_BYTES,
+                        actualBytes: sizeBytes,
+                        url: openApiUrl,
+                    },
+                });
+            }
+
+            return body;
+        } catch (error) {
+            if (error instanceof AppError) {
+                throw error;
+            }
+
+            throw new AppError({
+                code: ErrorCodes.VALIDATION_ERROR,
+                message: 'OPENAPI_FETCH_FAILED',
+                httpStatus: 400,
+                details: {
+                    reason: 'NETWORK_ERROR',
+                    url: openApiUrl,
+                },
+            });
+        } finally {
+            clearTimeout(timeout);
+        }
     }
 }

@@ -91,6 +91,8 @@ model ApiVersion {
     version    String
     status     VersionStatus @default(DRAFT)
     openApiUrl String
+    openApiSnapshot String?
+    openApiFetchedAt DateTime?
     createdAt  DateTime      @default(now())
     product    ApiProduct    @relation(fields: [productId], references: [id], onDelete: Cascade)
 

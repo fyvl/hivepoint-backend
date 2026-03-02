@@ -9,6 +9,7 @@ Manages API products and their versions, with public visibility driven by status
 | GET | `/catalog/products` | Public | Query: `search`, `category`, `limit`, `offset` | `ProductListResponseDto` | Only `PUBLISHED` products; `search` is case-insensitive. |
 | GET | `/catalog/products/:id` | Optional Bearer | None | `ProductDto` | Unpublished products require owner/admin; invalid token returns `UNAUTHORIZED`. |
 | GET | `/catalog/products/:id/versions` | Optional Bearer | None | `VersionListResponseDto` | Public sees only `PUBLISHED` versions and only if product is `PUBLISHED`. |
+| GET | `/catalog/versions/:versionId/schema` | Optional Bearer | None | `VersionSchemaDto` | Returns locally stored OpenAPI snapshot; public only for published product+version. |
 
 ### Listing query parameters
 - `search`: string, trimmed; matches `title` contains (case-insensitive).
@@ -30,8 +31,14 @@ All seller/admin endpoints require `JwtGuard` + `RolesGuard` with `SELLER` or `A
 ## Visibility and ownership rules
 - Public listing and product views show only `PUBLISHED` products.
 - Public versions listing shows only `PUBLISHED` versions, and only if the product is `PUBLISHED`.
+- Public schema snapshot read is allowed only when both product and version are `PUBLISHED`.
 - Owner or `ADMIN` can view and update products/versions regardless of status.
 - `SELLER` can create/update only their own products and versions.
+
+## OpenAPI storage
+- On version create/update (when `openApiUrl` is provided), backend fetches the schema and stores a local snapshot.
+- Stored snapshot is returned by `/catalog/versions/:versionId/schema`.
+- If fetching fails, create/update returns `VALIDATION_ERROR` with message `OPENAPI_FETCH_FAILED`.
 
 ## Status values
 - `ProductStatus`: `DRAFT`, `PUBLISHED`, `HIDDEN`.

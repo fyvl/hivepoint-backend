@@ -176,6 +176,20 @@ curl -s -X PATCH "$BASE_URL/catalog/products/$PRODUCT_ID" \
   -d '{"status":"PUBLISHED"}'
 ```
 
+Create product version with OpenAPI URL (schema is fetched and stored locally):
+```bash
+curl -s -X POST "$BASE_URL/catalog/products/$PRODUCT_ID/versions" \
+  -H "Authorization: Bearer $SELLER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"version":"v1","openApiUrl":"https://example.com/openapi.json"}'
+```
+
+Read stored schema snapshot:
+```bash
+VERSION_ID=...
+curl -s "$BASE_URL/catalog/versions/$VERSION_ID/schema"
+```
+
 Public list:
 ```bash
 curl -s "$BASE_URL/catalog/products"

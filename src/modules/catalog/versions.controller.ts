@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
 import {
     ApiBearerAuth,
     ApiBody,
@@ -20,12 +20,28 @@ import { updateVersionSchema } from './catalog.schemas';
 import type { UpdateVersionInput } from './catalog.schemas';
 import { UpdateVersionDto } from './dto/update-version.dto';
 import { VersionDto } from './dto/version.dto';
+import { VersionSchemaDto } from './dto/version-schema.dto';
+import { OptionalJwtGuard } from './guards/optional-jwt.guard';
 import { VersionsService } from './versions.service';
 
 @ApiTags('catalog')
 @Controller('catalog')
 export class VersionsController {
     constructor(private readonly versionsService: VersionsService) {}
+
+    @Get('versions/:versionId/schema')
+    @UseGuards(OptionalJwtGuard)
+    @ApiOperation({ summary: 'Get stored OpenAPI schema snapshot for version' })
+    @ApiOkResponse({ type: VersionSchemaDto })
+    @ApiNotFoundResponse({ description: 'VERSION_NOT_FOUND or OPENAPI_SCHEMA_NOT_AVAILABLE' })
+    @ApiForbiddenResponse({ description: 'PRODUCT_NOT_PUBLIC or NOT_OWNER' })
+    @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
+    async getVersionSchema(
+        @Param('versionId') versionId: string,
+        @User() user?: AuthenticatedUser,
+    ): Promise<VersionSchemaDto> {
+        return this.versionsService.getVersionSchema(versionId, user);
+    }
 
     @Patch('versions/:versionId')
     @UseGuards(JwtGuard, RolesGuard)
