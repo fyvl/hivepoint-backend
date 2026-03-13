@@ -33,5 +33,15 @@ All API errors are returned in a unified format:
 | `ALREADY_SUBSCRIBED` | 409 | Billing subscriptions service (subscribe flow). |
 | `SUBSCRIPTION_PENDING` | 409 | Billing subscriptions service (subscribe flow). |
 | `SUBSCRIPTION_NOT_FOUND` | 404 | Billing subscriptions service (cancel). |
+| `SUBSCRIPTION_NOT_ACTIVE` | 400 | Usage service when usage is recorded for a non-active subscription. |
 | `INVOICE_NOT_FOUND` | 404 | Billing subscriptions service (mock payments). |
 | `MOCK_PAYMENT_FORBIDDEN` | 403 | Billing mock payment guard. |
+| `INVALID_API_KEY` | 401 | Gateway dispatch when `x-api-key` is invalid. |
+| `NO_ACTIVE_SUBSCRIPTION` | 403 | Gateway dispatch when the API key owner has no active subscription for the product. |
+| `QUOTA_EXCEEDED` | 429 | Gateway dispatch when the request would exceed the plan quota. |
+| `USAGE_INGEST_FORBIDDEN` | 403 | Usage internal endpoints when `x-usage-secret` is missing or invalid. |
+| `PAYMENT_PROVIDER_NOT_ENABLED` | 400 | Billing Stripe provider endpoints when Stripe is not active. |
+| `STRIPE_WEBHOOK_INVALID` | 400 | Stripe webhook signature validation. |
+| `CHECKOUT_SESSION_NOT_FOUND` | 404 | Billing checkout status lookup. |
+| `GATEWAY_TARGET_NOT_CONFIGURED` | 502 | Gateway dispatch when no upstream base URL can be resolved from the stored OpenAPI snapshot. |
+| `GATEWAY_UPSTREAM_UNAVAILABLE` | 502 | Gateway dispatch when the upstream request fails or times out. |

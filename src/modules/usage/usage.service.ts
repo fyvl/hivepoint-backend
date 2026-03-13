@@ -6,9 +6,11 @@ import type { AuthenticatedUser } from '../../common/decorators/user.decorator';
 import { AppError } from '../../common/errors/app.error';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import type { RecordUsageInput } from './usage.schemas';
+import { hashApiKey } from '../../common/utils/crypto';
+import { AuthorizeUsageResponseDto } from './dto/authorize-usage-response.dto';
 import { RecordUsageResponseDto } from './dto/record-usage-response.dto';
 import { UsageSummaryResponseDto } from './dto/usage-summary.dto';
+import type { AuthorizeUsageInput, RecordUsageInput } from './usage.schemas';
 
 @Injectable()
 export class UsageService {
@@ -17,58 +19,37 @@ export class UsageService {
         private readonly configService: ConfigService<Env, true>,
     ) {}
 
+    async authorizeUsage(
+        input: AuthorizeUsageInput,
+        providedSecret?: string,
+    ): Promise<AuthorizeUsageResponseDto> {
+        this.assertUsageSecret(providedSecret);
+        return this.authorizeUsageInternal(input);
+    }
+
+    async authorizeGatewayUsage(
+        input: AuthorizeUsageInput,
+    ): Promise<AuthorizeUsageResponseDto> {
+        return this.authorizeUsageInternal(input);
+    }
+
+    async recordAuthorizedUsage(input: RecordUsageInput): Promise<void> {
+        await this.createUsageRecord(input);
+    }
+
     async ingestUsage(
         input: RecordUsageInput,
         providedSecret?: string,
     ): Promise<RecordUsageResponseDto> {
-        const secret = this.configService.getOrThrow<string>('USAGE_INGEST_SECRET');
-        if (!providedSecret || providedSecret !== secret) {
-            throw new AppError({
-                code: ErrorCodes.USAGE_INGEST_FORBIDDEN,
-                message: 'USAGE_INGEST_FORBIDDEN',
-                httpStatus: 403,
-            });
-        }
-
-        const subscription = await this.prisma.subscription.findUnique({
-            where: { id: input.subscriptionId },
-            select: {
-                id: true,
-                status: true,
-            },
-        });
-
-        if (!subscription) {
-            throw new AppError({
-                code: ErrorCodes.SUBSCRIPTION_NOT_FOUND,
-                message: 'SUBSCRIPTION_NOT_FOUND',
-                httpStatus: 404,
-            });
-        }
-
-        if (subscription.status !== SubscriptionStatus.ACTIVE) {
-            throw new AppError({
-                code: ErrorCodes.SUBSCRIPTION_NOT_ACTIVE,
-                message: 'SUBSCRIPTION_NOT_ACTIVE',
-                httpStatus: 400,
-            });
-        }
-
-        const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
-
-        await this.prisma.usageRecord.create({
-            data: {
-                subscriptionId: subscription.id,
-                occurredAt,
-                endpoint: input.endpoint,
-                requestCount: input.requestCount,
-            },
-        });
+        this.assertUsageSecret(providedSecret);
+        await this.createUsageRecord(input);
 
         return { ok: true };
     }
 
-    async getSummary(user: AuthenticatedUser): Promise<UsageSummaryResponseDto> {
+    async getSummary(
+        user: AuthenticatedUser,
+    ): Promise<UsageSummaryResponseDto> {
         const subscriptions = await this.prisma.subscription.findMany({
             where: {
                 userId: user.id,
@@ -95,7 +76,9 @@ export class UsageService {
         });
 
         const activeWithPeriod = subscriptions.filter(
-            (subscription) => subscription.currentPeriodStart && subscription.currentPeriodEnd,
+            (subscription) =>
+                subscription.currentPeriodStart &&
+                subscription.currentPeriodEnd,
         );
 
         if (activeWithPeriod.length === 0) {
@@ -121,15 +104,22 @@ export class UsageService {
         });
 
         const usageMap = new Map(
-            grouped.map((row) => [row.subscriptionId, row._sum.requestCount ?? 0]),
+            grouped.map((row) => [
+                row.subscriptionId,
+                row._sum.requestCount ?? 0,
+            ]),
         );
 
         const items = activeWithPeriod.map((subscription) => {
             const usedRequests = usageMap.get(subscription.id) ?? 0;
             const quotaRequests = subscription.plan.quotaRequests;
-            const percent = quotaRequests > 0
-                ? Math.min(100, Math.floor((usedRequests / quotaRequests) * 100))
-                : 0;
+            const percent =
+                quotaRequests > 0
+                    ? Math.min(
+                          100,
+                          Math.floor((usedRequests / quotaRequests) * 100),
+                      )
+                    : 0;
 
             return {
                 subscriptionId: subscription.id,
@@ -151,5 +141,233 @@ export class UsageService {
         });
 
         return { items };
+    }
+
+    private async authorizeUsageInternal(
+        input: AuthorizeUsageInput,
+    ): Promise<AuthorizeUsageResponseDto> {
+        const product = await this.prisma.apiProduct.findUnique({
+            where: { id: input.productId },
+            select: {
+                id: true,
+                title: true,
+            },
+        });
+
+        if (!product) {
+            throw new AppError({
+                code: ErrorCodes.PRODUCT_NOT_FOUND,
+                message: 'PRODUCT_NOT_FOUND',
+                httpStatus: 404,
+            });
+        }
+
+        const apiKey = await this.prisma.apiKey.findFirst({
+            where: {
+                keyHash: this.hashIncomingApiKey(input.apiKey),
+                isActive: true,
+                revokedAt: null,
+            },
+            select: {
+                id: true,
+                userId: true,
+            },
+        });
+
+        if (!apiKey) {
+            return {
+                allowed: false,
+                reason: 'INVALID_API_KEY',
+                product,
+                requestedRequests: input.requestCount,
+                usageRecorded: false,
+            };
+        }
+
+        const occurredAt = input.occurredAt
+            ? new Date(input.occurredAt)
+            : new Date();
+        const subscription = await this.prisma.subscription.findFirst({
+            where: {
+                userId: apiKey.userId,
+                status: SubscriptionStatus.ACTIVE,
+                currentPeriodStart: {
+                    lte: occurredAt,
+                },
+                currentPeriodEnd: {
+                    gt: occurredAt,
+                },
+                plan: {
+                    productId: input.productId,
+                },
+            },
+            select: {
+                id: true,
+                userId: true,
+                currentPeriodStart: true,
+                currentPeriodEnd: true,
+                plan: {
+                    select: {
+                        id: true,
+                        name: true,
+                        quotaRequests: true,
+                        product: {
+                            select: {
+                                id: true,
+                                title: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
+        if (
+            !subscription ||
+            !subscription.currentPeriodStart ||
+            !subscription.currentPeriodEnd
+        ) {
+            return {
+                allowed: false,
+                reason: 'NO_ACTIVE_SUBSCRIPTION',
+                apiKeyId: apiKey.id,
+                userId: apiKey.userId,
+                product,
+                requestedRequests: input.requestCount,
+                usageRecorded: false,
+            };
+        }
+
+        const usageAggregate = await this.prisma.usageRecord.aggregate({
+            where: {
+                subscriptionId: subscription.id,
+                occurredAt: {
+                    gte: subscription.currentPeriodStart,
+                    lt: subscription.currentPeriodEnd,
+                },
+            },
+            _sum: {
+                requestCount: true,
+            },
+        });
+
+        const usedRequests = usageAggregate._sum.requestCount ?? 0;
+        const quotaRequests = subscription.plan.quotaRequests;
+        const requestedRequests = input.requestCount;
+        const nextUsedRequests = usedRequests + requestedRequests;
+
+        if (nextUsedRequests > quotaRequests) {
+            return {
+                allowed: false,
+                reason: 'QUOTA_EXCEEDED',
+                apiKeyId: apiKey.id,
+                subscriptionId: subscription.id,
+                userId: subscription.userId,
+                periodStart: subscription.currentPeriodStart,
+                periodEnd: subscription.currentPeriodEnd,
+                usedRequests,
+                requestedRequests,
+                quotaRequests,
+                remainingRequests: Math.max(0, quotaRequests - usedRequests),
+                usageRecorded: false,
+                plan: {
+                    id: subscription.plan.id,
+                    name: subscription.plan.name,
+                    quotaRequests: subscription.plan.quotaRequests,
+                },
+                product: subscription.plan.product,
+            };
+        }
+
+        const shouldConsume = input.consume ?? false;
+        if (shouldConsume) {
+            await this.createUsageRecord({
+                subscriptionId: subscription.id,
+                occurredAt: occurredAt.toISOString(),
+                endpoint: input.endpoint,
+                requestCount: requestedRequests,
+            });
+        }
+
+        const finalUsedRequests = shouldConsume
+            ? nextUsedRequests
+            : usedRequests;
+
+        return {
+            allowed: true,
+            apiKeyId: apiKey.id,
+            subscriptionId: subscription.id,
+            userId: subscription.userId,
+            periodStart: subscription.currentPeriodStart,
+            periodEnd: subscription.currentPeriodEnd,
+            usedRequests: finalUsedRequests,
+            requestedRequests,
+            quotaRequests,
+            remainingRequests: Math.max(0, quotaRequests - finalUsedRequests),
+            usageRecorded: shouldConsume,
+            plan: {
+                id: subscription.plan.id,
+                name: subscription.plan.name,
+                quotaRequests: subscription.plan.quotaRequests,
+            },
+            product: subscription.plan.product,
+        };
+    }
+
+    private async createUsageRecord(input: RecordUsageInput): Promise<void> {
+        const subscription = await this.prisma.subscription.findUnique({
+            where: { id: input.subscriptionId },
+            select: {
+                id: true,
+                status: true,
+            },
+        });
+
+        if (!subscription) {
+            throw new AppError({
+                code: ErrorCodes.SUBSCRIPTION_NOT_FOUND,
+                message: 'SUBSCRIPTION_NOT_FOUND',
+                httpStatus: 404,
+            });
+        }
+
+        if (subscription.status !== SubscriptionStatus.ACTIVE) {
+            throw new AppError({
+                code: ErrorCodes.SUBSCRIPTION_NOT_ACTIVE,
+                message: 'SUBSCRIPTION_NOT_ACTIVE',
+                httpStatus: 400,
+            });
+        }
+
+        const occurredAt = input.occurredAt
+            ? new Date(input.occurredAt)
+            : new Date();
+
+        await this.prisma.usageRecord.create({
+            data: {
+                subscriptionId: subscription.id,
+                occurredAt,
+                endpoint: input.endpoint,
+                requestCount: input.requestCount,
+            },
+        });
+    }
+
+    private assertUsageSecret(providedSecret?: string): void {
+        const secret = this.configService.getOrThrow<string>(
+            'USAGE_INGEST_SECRET',
+        );
+        if (!providedSecret || providedSecret !== secret) {
+            throw new AppError({
+                code: ErrorCodes.USAGE_INGEST_FORBIDDEN,
+                message: 'USAGE_INGEST_FORBIDDEN',
+                httpStatus: 403,
+            });
+        }
+    }
+
+    private hashIncomingApiKey(rawKey: string): string {
+        const salt = this.configService.getOrThrow<string>('API_KEY_SALT');
+        return hashApiKey(rawKey, salt);
     }
 }

@@ -1,5 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { SubscriptionStatus } from '@prisma/client';
+import {
+    BillingProvider,
+    InvoiceStatus,
+    SubscriptionStatus,
+} from '@prisma/client';
 
 export class SubscriptionPlanDto {
     @ApiProperty({ example: 'uuid' })
@@ -29,6 +33,23 @@ export class SubscriptionProductDto {
     title!: string;
 }
 
+export class SubscriptionInvoiceDto {
+    @ApiProperty({ example: 'uuid' })
+    id!: string;
+
+    @ApiProperty({ enum: InvoiceStatus })
+    status!: InvoiceStatus;
+
+    @ApiProperty({ example: 9900 })
+    amountCents!: number;
+
+    @ApiProperty({ example: 'USD' })
+    currency!: string;
+
+    @ApiProperty({ type: String, format: 'date-time' })
+    createdAt!: Date;
+}
+
 export class SubscriptionDto {
     @ApiProperty({ example: 'uuid' })
     id!: string;
@@ -45,6 +66,12 @@ export class SubscriptionDto {
     @ApiProperty({ example: false })
     cancelAtPeriodEnd!: boolean;
 
+    @ApiProperty({ enum: BillingProvider })
+    paymentProvider!: BillingProvider;
+
+    @ApiProperty({ example: false })
+    hasExternalSubscription!: boolean;
+
     @ApiProperty({ type: String, format: 'date-time' })
     createdAt!: Date;
 
@@ -56,4 +83,10 @@ export class SubscriptionDto {
 
     @ApiProperty({ type: SubscriptionProductDto })
     product!: SubscriptionProductDto;
+
+    @ApiProperty({ type: SubscriptionInvoiceDto, nullable: true })
+    latestInvoice!: SubscriptionInvoiceDto | null;
+
+    @ApiProperty({ type: SubscriptionInvoiceDto, isArray: true })
+    invoices!: SubscriptionInvoiceDto[];
 }

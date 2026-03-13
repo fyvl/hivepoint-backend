@@ -35,21 +35,27 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     subgraph Current MVP
-        A[Client] -->|POST /usage/record\nx-usage-secret| B[Usage Controller]
+        A[Seller API or Gateway] -->|POST /usage/authorize\nx-usage-secret| B[Usage Controller]
         B --> C[Usage Service]
-        C --> D[(UsageRecord)]
-        A -->|GET /usage/summary\nBearer| B2[Usage Summary]
+        C --> D[(ApiKey)]
+        C --> E[(Subscription + Plan + Product)]
+        C --> F[(UsageRecord)]
+        C --> G[Quota check]
+        A -->|POST /usage/record\nx-usage-secret| B2[Usage Controller]
         B2 --> C2[Usage Service]
-        C2 --> D2[(UsageRecord)]
-        C2 --> E[(Subscription + Plan + Product)]
-        C2 --> F[Aggregate per subscription]
+        C2 --> F
+        H[Buyer App] -->|GET /usage/summary\nBearer| I[Usage Summary]
+        I --> J[Usage Service]
+        J --> F
+        J --> E
+        J --> K[Aggregate per subscription]
     end
 
     subgraph Future
-        G[Gateway/Proxy] --> H[Usage Events]
-        H --> I[Queue/Stream]
-        I --> J[Async Aggregator]
-        J --> K[(Usage Summary Store)]
+        L[Gateway/Proxy] --> M[Usage Events]
+        M --> N[Queue/Stream]
+        N --> O[Async Aggregator]
+        O --> P[(Usage Summary Store)]
     end
 ```
 

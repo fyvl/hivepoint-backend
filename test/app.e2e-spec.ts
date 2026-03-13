@@ -1,3 +1,9 @@
+import {
+    AddressInfo,
+    createServer,
+    type IncomingMessage,
+    type Server,
+} from 'node:http';
 import { INestApplication } from '@nestjs/common';
 import { PrismaClient, Role, SubscriptionStatus } from '@prisma/client';
 import request from 'supertest';
@@ -23,8 +29,77 @@ const getEnv = (key: string): string => {
 describe('E2E flows', () => {
     let app: INestApplication;
     let prisma: PrismaClient;
+    let sellerApiServer: Server;
+    let sellerApiBaseUrl: string;
 
     beforeAll(async () => {
+        sellerApiServer = createServer((req, res) => {
+            const method = req.method ?? 'GET';
+            const requestUrl = new URL(
+                req.url ?? '/',
+                sellerApiBaseUrl || 'http://127.0.0.1',
+            );
+
+            if (method === 'GET' && requestUrl.pathname === '/openapi.json') {
+                const openApiDocument = {
+                    openapi: '3.0.0',
+                    info: {
+                        title: 'Seller Test API',
+                        version: '1.0.0',
+                    },
+                    servers: [
+                        {
+                            url: `${sellerApiBaseUrl}/v1`,
+                        },
+                    ],
+                };
+                res.writeHead(200, { 'content-type': 'application/json' });
+                res.end(JSON.stringify(openApiDocument));
+                return;
+            }
+
+            if (method === 'GET' && requestUrl.pathname === '/v1/health') {
+                res.writeHead(200, {
+                    'content-type': 'application/json',
+                    'x-seller-request-id': 'seller-health-1',
+                });
+                res.end(
+                    JSON.stringify({
+                        ok: true,
+                        source: 'seller-test-api',
+                        verbose: requestUrl.searchParams.get('verbose'),
+                    }),
+                );
+                return;
+            }
+
+            if (method === 'POST' && requestUrl.pathname === '/v1/echo') {
+                void (async () => {
+                    const body = await readJsonBody(req);
+                    res.writeHead(200, {
+                        'content-type': 'application/json',
+                        'x-seller-request-id': 'seller-echo-1',
+                    });
+                    res.end(
+                        JSON.stringify({
+                            ok: true,
+                            echoed: body,
+                        }),
+                    );
+                })();
+                return;
+            }
+
+            res.writeHead(404, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({ ok: false, path: requestUrl.pathname }));
+        });
+
+        await new Promise<void>((resolve) => {
+            sellerApiServer.listen(0, '127.0.0.1', () => resolve());
+        });
+        const sellerApiAddress = sellerApiServer.address() as AddressInfo;
+        sellerApiBaseUrl = `http://127.0.0.1:${sellerApiAddress.port}`;
+
         app = await createTestApp();
         prisma = new PrismaClient();
     });
@@ -35,6 +110,16 @@ describe('E2E flows', () => {
 
     afterAll(async () => {
         await app.close();
+        await new Promise<void>((resolve, reject) => {
+            sellerApiServer.close((error) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+
+                resolve();
+            });
+        });
         await prisma.$disconnect();
     });
 
@@ -75,9 +160,16 @@ describe('E2E flows', () => {
         };
     };
 
-    const createSellerAndPlan = async () => {
+    const createSellerAndPlan = async (options?: {
+        publishProduct?: boolean;
+        publishVersion?: boolean;
+    }) => {
         const sellerEmail = uniqueEmail('seller');
-        const seller = await registerUser(sellerEmail, DEFAULT_PASSWORD, Role.SELLER);
+        const seller = await registerUser(
+            sellerEmail,
+            DEFAULT_PASSWORD,
+            Role.SELLER,
+        );
 
         const { accessToken: sellerToken } = await loginUser(sellerEmail);
 
@@ -91,6 +183,47 @@ describe('E2E flows', () => {
                 tags: ['payments'],
             })
             .expect(201);
+
+        if (options?.publishProduct) {
+            await request(app.getHttpServer())
+                .patch(`/catalog/products/${productResponse.body.id}`)
+                .set('Authorization', `Bearer ${sellerToken}`)
+                .send({
+                    status: 'PUBLISHED',
+                })
+                .expect(200);
+        }
+
+        let version:
+            | {
+                  id: string;
+                  productId: string;
+              }
+            | undefined;
+
+        if (options?.publishVersion) {
+            const versionResponse = await request(app.getHttpServer())
+                .post(`/catalog/products/${productResponse.body.id}/versions`)
+                .set('Authorization', `Bearer ${sellerToken}`)
+                .send({
+                    version: 'v1',
+                    openApiUrl: `${sellerApiBaseUrl}/openapi.json`,
+                })
+                .expect(201);
+
+            version = versionResponse.body as {
+                id: string;
+                productId: string;
+            };
+
+            await request(app.getHttpServer())
+                .patch(`/catalog/versions/${version.id}`)
+                .set('Authorization', `Bearer ${sellerToken}`)
+                .send({
+                    status: 'PUBLISHED',
+                })
+                .expect(200);
+        }
 
         const planResponse = await request(app.getHttpServer())
             .post('/billing/plans')
@@ -108,6 +241,7 @@ describe('E2E flows', () => {
             seller,
             sellerToken,
             product: productResponse.body as { id: string; ownerId: string },
+            version,
             plan: planResponse.body as { id: string; productId: string },
         };
     };
@@ -142,7 +276,9 @@ describe('E2E flows', () => {
             }),
         );
 
-        const refreshCookies = refreshResponse.headers['set-cookie'] as string[] | undefined;
+        const refreshCookies = refreshResponse.headers['set-cookie'] as
+            | string[]
+            | undefined;
         expect(refreshCookies?.length).toBeTruthy();
 
         await request(app.getHttpServer())
@@ -269,7 +405,11 @@ describe('E2E flows', () => {
 
     it('seller flow: create product -> create plan', async () => {
         const sellerEmail = uniqueEmail('seller');
-        const seller = await registerUser(sellerEmail, DEFAULT_PASSWORD, Role.SELLER);
+        const seller = await registerUser(
+            sellerEmail,
+            DEFAULT_PASSWORD,
+            Role.SELLER,
+        );
 
         const { accessToken: sellerToken } = await loginUser(sellerEmail);
 
@@ -303,11 +443,15 @@ describe('E2E flows', () => {
 
     it('seller catalog scope: my-products returns only current seller products', async () => {
         const sellerAEmail = uniqueEmail('seller-a');
-        const sellerA = await registerUser(sellerAEmail, DEFAULT_PASSWORD, Role.SELLER);
+        const sellerA = await registerUser(
+            sellerAEmail,
+            DEFAULT_PASSWORD,
+            Role.SELLER,
+        );
         const { accessToken: sellerAToken } = await loginUser(sellerAEmail);
 
         const sellerBEmail = uniqueEmail('seller-b');
-        const sellerB = await registerUser(sellerBEmail, DEFAULT_PASSWORD, Role.SELLER);
+        await registerUser(sellerBEmail, DEFAULT_PASSWORD, Role.SELLER);
         const { accessToken: sellerBToken } = await loginUser(sellerBEmail);
 
         await request(app.getHttpServer())
@@ -315,7 +459,8 @@ describe('E2E flows', () => {
             .set('Authorization', `Bearer ${sellerAToken}`)
             .send({
                 title: 'Seller A API',
-                description: 'Owned by seller A and should appear only in A workspace.',
+                description:
+                    'Owned by seller A and should appear only in A workspace.',
                 category: 'testing',
                 tags: ['a'],
             })
@@ -326,7 +471,8 @@ describe('E2E flows', () => {
             .set('Authorization', `Bearer ${sellerBToken}`)
             .send({
                 title: 'Seller B API',
-                description: 'Owned by seller B and should not appear in A workspace.',
+                description:
+                    'Owned by seller B and should not appear in A workspace.',
                 category: 'testing',
                 tags: ['b'],
             })
@@ -493,4 +639,102 @@ describe('E2E flows', () => {
             }),
         );
     });
+
+    it('buyer flow: subscribe -> key -> gateway dispatch -> usage summary', async () => {
+        const { product, plan } = await createSellerAndPlan({
+            publishProduct: true,
+            publishVersion: true,
+        });
+
+        const buyerEmail = uniqueEmail('buyer');
+        await registerUser(buyerEmail);
+        const { accessToken: buyerToken } = await loginUser(buyerEmail);
+
+        const subscribeResponse = await request(app.getHttpServer())
+            .post('/billing/subscribe')
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .send({ planId: plan.id })
+            .expect(201);
+
+        const { subscriptionId, invoiceId } = subscribeResponse.body as {
+            subscriptionId: string;
+            invoiceId: string;
+        };
+
+        await request(app.getHttpServer())
+            .post(`/billing/mock/succeed?invoiceId=${invoiceId}`)
+            .set('x-mock-payment-secret', getEnv('MOCK_PAYMENT_SECRET'))
+            .expect(201)
+            .expect({ ok: true });
+
+        const createKeyResponse = await request(app.getHttpServer())
+            .post('/keys')
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .send({ label: 'Gateway key' })
+            .expect(201);
+
+        const gatewayResponse = await request(app.getHttpServer())
+            .post('/gateway/dispatch')
+            .set('x-api-key', createKeyResponse.body.rawKey as string)
+            .send({
+                productId: product.id,
+                path: '/health',
+                method: 'GET',
+                query: {
+                    verbose: 'true',
+                },
+                requestCount: 1,
+            })
+            .expect(200);
+
+        expect(gatewayResponse.body).toEqual(
+            expect.objectContaining({
+                ok: true,
+                status: 200,
+                method: 'GET',
+                contentType: expect.stringContaining('application/json'),
+                body: expect.objectContaining({
+                    ok: true,
+                    source: 'seller-test-api',
+                    verbose: 'true',
+                }),
+                usage: expect.objectContaining({
+                    subscriptionId,
+                    requestCount: 1,
+                    usageRecorded: true,
+                }),
+            }),
+        );
+        expect(gatewayResponse.body.upstreamUrl).toContain(
+            '/v1/health?verbose=true',
+        );
+
+        const summaryResponse = await request(app.getHttpServer())
+            .get('/usage/summary')
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .expect(200);
+
+        expect(summaryResponse.body.items).toHaveLength(1);
+        expect(summaryResponse.body.items[0]).toEqual(
+            expect.objectContaining({
+                subscriptionId,
+                usedRequests: 1,
+                quotaRequests: expect.any(Number),
+            }),
+        );
+    });
 });
+
+const readJsonBody = async (request: IncomingMessage): Promise<unknown> => {
+    const chunks: Buffer[] = [];
+
+    for await (const chunk of request) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+
+    if (chunks.length === 0) {
+        return null;
+    }
+
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+};

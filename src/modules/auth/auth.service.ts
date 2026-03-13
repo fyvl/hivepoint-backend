@@ -6,7 +6,12 @@ import { AppConfigService } from '../../common/config/config.service';
 import { AppError } from '../../common/errors/app.error';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
-import { hashPassword, hashToken, verifyPassword, verifyTokenHash } from '../../common/utils/crypto';
+import {
+    hashPassword,
+    hashToken,
+    verifyPassword,
+    verifyTokenHash,
+} from '../../common/utils/crypto';
 import {
     LoginInput,
     RegisterInput,
@@ -87,7 +92,10 @@ export class AuthService {
             throw this.buildUnauthorizedError('INVALID_CREDENTIALS');
         }
 
-        const passwordValid = await verifyPassword(data.password, user.passwordHash);
+        const passwordValid = await verifyPassword(
+            data.password,
+            user.passwordHash,
+        );
         if (!passwordValid) {
             throw this.buildUnauthorizedError('INVALID_CREDENTIALS');
         }
@@ -140,7 +148,10 @@ export class AuthService {
             throw this.buildUnauthorizedError('UNAUTHORIZED');
         }
 
-        const matches = await verifyTokenHash(refreshToken, storedToken.tokenHash);
+        const matches = await verifyTokenHash(
+            refreshToken,
+            storedToken.tokenHash,
+        );
         if (!matches) {
             await this.prisma.refreshToken.deleteMany({
                 where: { userId: storedToken.userId },
@@ -152,7 +163,9 @@ export class AuthService {
             where: { userId: storedToken.userId },
         });
 
-        const { tokenId, token, expiresAt } = this.createRefreshToken(storedToken.user);
+        const { tokenId, token, expiresAt } = this.createRefreshToken(
+            storedToken.user,
+        );
         const tokenHash = await hashToken(token);
 
         await this.prisma.refreshToken.create({
@@ -201,9 +214,15 @@ export class AuthService {
         });
     }
 
-    private createRefreshToken(user: User): { tokenId: string; token: string; expiresAt: Date } {
+    private createRefreshToken(user: User): {
+        tokenId: string;
+        token: string;
+        expiresAt: Date;
+    } {
         const tokenId = randomUUID();
-        const expiresAt = new Date(Date.now() + this.configService.jwtRefreshTtlSeconds * 1000);
+        const expiresAt = new Date(
+            Date.now() + this.configService.jwtRefreshTtlSeconds * 1000,
+        );
 
         const token = jwt.sign(
             {
@@ -221,7 +240,10 @@ export class AuthService {
 
     private verifyRefreshToken(token: string): RefreshTokenPayload {
         try {
-            const decoded = jwt.verify(token, this.configService.jwtRefreshSecret);
+            const decoded = jwt.verify(
+                token,
+                this.configService.jwtRefreshSecret,
+            );
             if (typeof decoded === 'string') {
                 throw new Error('Invalid token payload');
             }

@@ -10,6 +10,7 @@ import { BillingModule } from './modules/billing/billing.module';
 import { KeysModule } from './modules/keys/keys.module';
 import { UsageModule } from './modules/usage/usage.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { GatewayModule } from './modules/gateway/gateway.module';
 
 @Module({
     imports: [
@@ -23,6 +24,7 @@ import { AdminModule } from './modules/admin/admin.module';
         BillingModule,
         KeysModule,
         UsageModule,
+        GatewayModule,
         AdminModule,
     ],
 })

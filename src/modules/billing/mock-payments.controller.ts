@@ -29,7 +29,8 @@ export class MockPaymentsController {
     @ApiNotFoundResponse({ description: 'INVOICE_NOT_FOUND' })
     @ApiForbiddenResponse({ description: 'MOCK_PAYMENT_FORBIDDEN' })
     async succeed(
-        @Query(new ZodValidationPipe(mockPaymentQuerySchema)) query: MockPaymentQuery,
+        @Query(new ZodValidationPipe(mockPaymentQuerySchema))
+        query: MockPaymentQuery,
     ): Promise<MockPaymentResponseDto> {
         return this.subscriptionsService.mockSucceed(query.invoiceId);
     }
@@ -43,7 +44,8 @@ export class MockPaymentsController {
     @ApiNotFoundResponse({ description: 'INVOICE_NOT_FOUND' })
     @ApiForbiddenResponse({ description: 'MOCK_PAYMENT_FORBIDDEN' })
     async fail(
-        @Query(new ZodValidationPipe(mockPaymentQuerySchema)) query: MockPaymentQuery,
+        @Query(new ZodValidationPipe(mockPaymentQuerySchema))
+        query: MockPaymentQuery,
     ): Promise<MockPaymentResponseDto> {
         return this.subscriptionsService.mockFail(query.invoiceId);
     }

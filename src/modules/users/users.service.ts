@@ -35,7 +35,10 @@ export class UsersService {
         return user;
     }
 
-    async updateMyRole(userId: string, targetRole: Role): Promise<UserMeResponseDto> {
+    async updateMyRole(
+        userId: string,
+        targetRole: Role,
+    ): Promise<UserMeResponseDto> {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
             select: userMeSelect,
@@ -96,7 +99,8 @@ export class UsersService {
         }
 
         const canUpgradeToSeller = user.role === Role.BUYER;
-        const shouldCountProducts = user.role === Role.SELLER || user.role === Role.ADMIN;
+        const shouldCountProducts =
+            user.role === Role.SELLER || user.role === Role.ADMIN;
 
         const [
             subscriptionsTotal,
@@ -145,7 +149,10 @@ export class UsersService {
         };
     }
 
-    async changePassword(userId: string, input: ChangePasswordInput): Promise<{ ok: true }> {
+    async changePassword(
+        userId: string,
+        input: ChangePasswordInput,
+    ): Promise<{ ok: true }> {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
             select: {
@@ -162,7 +169,10 @@ export class UsersService {
             });
         }
 
-        const matches = await verifyPassword(input.currentPassword, user.passwordHash);
+        const matches = await verifyPassword(
+            input.currentPassword,
+            user.passwordHash,
+        );
         if (!matches) {
             throw new AppError({
                 code: ErrorCodes.UNAUTHORIZED,

@@ -16,7 +16,10 @@ import { JwtGuard } from '../../common/guards/jwt.guard';
 import { ZodValidationPipe } from '../../common/utils/zod-validation.pipe';
 import { changePasswordSchema, updateMyRoleSchema } from './users.schemas';
 import type { ChangePasswordInput, UpdateMyRoleInput } from './users.schemas';
-import { ChangePasswordDto, ChangePasswordResponseDto } from './dto/change-password.dto';
+import {
+    ChangePasswordDto,
+    ChangePasswordResponseDto,
+} from './dto/change-password.dto';
 import { UserProfileSummaryDto } from './dto/profile-summary.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UserMeResponseDto } from './dto/user-me.dto';
@@ -45,7 +48,9 @@ export class UsersController {
     @ApiOkResponse({ type: UserProfileSummaryDto })
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
     @ApiNotFoundResponse({ description: 'USER_NOT_FOUND' })
-    async getProfileSummary(@User() user: AuthenticatedUser): Promise<UserProfileSummaryDto> {
+    async getProfileSummary(
+        @User() user: AuthenticatedUser,
+    ): Promise<UserProfileSummaryDto> {
         return this.usersService.getProfileSummary(user.id);
     }
 
@@ -59,7 +64,8 @@ export class UsersController {
     @ApiNotFoundResponse({ description: 'USER_NOT_FOUND' })
     @ApiForbiddenResponse({ description: 'FORBIDDEN_ROLE' })
     async updateMyRole(
-        @Body(new ZodValidationPipe(updateMyRoleSchema)) body: UpdateMyRoleInput,
+        @Body(new ZodValidationPipe(updateMyRoleSchema))
+        body: UpdateMyRoleInput,
         @User() user: AuthenticatedUser,
     ): Promise<UserMeResponseDto> {
         return this.usersService.updateMyRole(user.id, body.role);
@@ -71,11 +77,14 @@ export class UsersController {
     @ApiOperation({ summary: 'Change current user password' })
     @ApiBody({ type: ChangePasswordDto })
     @ApiOkResponse({ type: ChangePasswordResponseDto })
-    @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED or INVALID_CURRENT_PASSWORD' })
+    @ApiUnauthorizedResponse({
+        description: 'UNAUTHORIZED or INVALID_CURRENT_PASSWORD',
+    })
     @ApiNotFoundResponse({ description: 'USER_NOT_FOUND' })
     @ApiBadRequestResponse({ description: 'VALIDATION_ERROR' })
     async changePassword(
-        @Body(new ZodValidationPipe(changePasswordSchema)) body: ChangePasswordInput,
+        @Body(new ZodValidationPipe(changePasswordSchema))
+        body: ChangePasswordInput,
         @User() user: AuthenticatedUser,
     ): Promise<ChangePasswordResponseDto> {
         return this.usersService.changePassword(user.id, body);

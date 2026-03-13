@@ -52,7 +52,10 @@ export class PlansService {
         return { items };
     }
 
-    async createPlan(input: CreatePlanInput, user: AuthenticatedUser): Promise<PlanDto> {
+    async createPlan(
+        input: CreatePlanInput,
+        user: AuthenticatedUser,
+    ): Promise<PlanDto> {
         if (user.role !== Role.SELLER && user.role !== Role.ADMIN) {
             throw new AppError({
                 code: ErrorCodes.FORBIDDEN_ROLE,

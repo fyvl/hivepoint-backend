@@ -8,7 +8,8 @@ export class SwaggerAuthDocumentUpdater implements OnApplicationBootstrap {
     onApplicationBootstrap(): void {
         const document = this.openApiService.getDocument();
         document.components = document.components ?? {};
-        document.components.securitySchemes = document.components.securitySchemes ?? {};
+        document.components.securitySchemes =
+            document.components.securitySchemes ?? {};
         document.components.securitySchemes.bearer = {
             type: 'http',
             scheme: 'bearer',

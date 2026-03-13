@@ -130,7 +130,9 @@ export class VersionsService {
             });
         }
 
-        const openApiSnapshot = await this.fetchOpenApiSnapshot(input.openApiUrl);
+        const openApiSnapshot = await this.fetchOpenApiSnapshot(
+            input.openApiUrl,
+        );
 
         return this.prisma.apiVersion.create({
             data: {
@@ -179,7 +181,10 @@ export class VersionsService {
             });
         }
 
-        if (input.status && !this.isVersionStatusTransitionAllowed(version.status, input.status)) {
+        if (
+            input.status &&
+            !this.isVersionStatusTransitionAllowed(version.status, input.status)
+        ) {
             throw new AppError({
                 code: ErrorCodes.VALIDATION_ERROR,
                 message: 'INVALID_STATUS_TRANSITION',
@@ -194,7 +199,9 @@ export class VersionsService {
         }
 
         if (input.openApiUrl !== undefined) {
-            const openApiSnapshot = await this.fetchOpenApiSnapshot(input.openApiUrl);
+            const openApiSnapshot = await this.fetchOpenApiSnapshot(
+                input.openApiUrl,
+            );
             data.openApiUrl = input.openApiUrl;
             data.openApiSnapshot = openApiSnapshot;
             data.openApiFetchedAt = new Date();
@@ -296,11 +303,17 @@ export class VersionsService {
             return true;
         }
 
-        if (current === VersionStatus.DRAFT && next === VersionStatus.PUBLISHED) {
+        if (
+            current === VersionStatus.DRAFT &&
+            next === VersionStatus.PUBLISHED
+        ) {
             return true;
         }
 
-        if (current === VersionStatus.PUBLISHED && next === VersionStatus.DRAFT) {
+        if (
+            current === VersionStatus.PUBLISHED &&
+            next === VersionStatus.DRAFT
+        ) {
             return true;
         }
 
@@ -309,7 +322,10 @@ export class VersionsService {
 
     private async fetchOpenApiSnapshot(openApiUrl: string): Promise<string> {
         const abortController = new AbortController();
-        const timeout = setTimeout(() => abortController.abort(), OPENAPI_FETCH_TIMEOUT_MS);
+        const timeout = setTimeout(
+            () => abortController.abort(),
+            OPENAPI_FETCH_TIMEOUT_MS,
+        );
 
         try {
             const response = await fetch(openApiUrl, {

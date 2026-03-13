@@ -33,7 +33,9 @@ export class VersionsController {
     @UseGuards(OptionalJwtGuard)
     @ApiOperation({ summary: 'Get stored OpenAPI schema snapshot for version' })
     @ApiOkResponse({ type: VersionSchemaDto })
-    @ApiNotFoundResponse({ description: 'VERSION_NOT_FOUND or OPENAPI_SCHEMA_NOT_AVAILABLE' })
+    @ApiNotFoundResponse({
+        description: 'VERSION_NOT_FOUND or OPENAPI_SCHEMA_NOT_AVAILABLE',
+    })
     @ApiForbiddenResponse({ description: 'PRODUCT_NOT_PUBLIC or NOT_OWNER' })
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
     async getVersionSchema(
@@ -55,7 +57,8 @@ export class VersionsController {
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
     async updateVersion(
         @Param('versionId') versionId: string,
-        @Body(new ZodValidationPipe(updateVersionSchema)) body: UpdateVersionInput,
+        @Body(new ZodValidationPipe(updateVersionSchema))
+        body: UpdateVersionInput,
         @User() user: AuthenticatedUser,
     ): Promise<VersionDto> {
         return this.versionsService.updateVersion(versionId, body, user);

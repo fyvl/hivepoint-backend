@@ -4,7 +4,9 @@ import type { Env } from '../../../common/config/env.schema';
 import { ErrorCodes } from '../../../common/errors/error.codes';
 import { MockPaymentGuard } from './mock-payment.guard';
 
-const buildContext = (headers: Record<string, string | string[] | undefined>): ExecutionContext =>
+const buildContext = (
+    headers: Record<string, string | string[] | undefined>,
+): ExecutionContext =>
     ({
         switchToHttp: () => ({
             getRequest: () => ({ headers }),
@@ -23,7 +25,9 @@ describe('MockPaymentGuard', () => {
         try {
             guard.canActivate(buildContext({}));
         } catch (error) {
-            expect(error).toMatchObject({ code: ErrorCodes.MOCK_PAYMENT_FORBIDDEN });
+            expect(error).toMatchObject({
+                code: ErrorCodes.MOCK_PAYMENT_FORBIDDEN,
+            });
         }
     });
 
@@ -36,9 +40,13 @@ describe('MockPaymentGuard', () => {
         const guard = new MockPaymentGuard(configService);
 
         try {
-            guard.canActivate(buildContext({ 'x-mock-payment-secret': 'wrong' }));
+            guard.canActivate(
+                buildContext({ 'x-mock-payment-secret': 'wrong' }),
+            );
         } catch (error) {
-            expect(error).toMatchObject({ code: ErrorCodes.MOCK_PAYMENT_FORBIDDEN });
+            expect(error).toMatchObject({
+                code: ErrorCodes.MOCK_PAYMENT_FORBIDDEN,
+            });
         }
     });
 });

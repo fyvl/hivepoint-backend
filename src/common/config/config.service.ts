@@ -49,4 +49,28 @@ export class AppConfigService {
     get redisUrl(): string | undefined {
         return this.configService.get('REDIS_URL');
     }
+
+    get paymentProvider(): Env['PAYMENT_PROVIDER'] {
+        return this.configService.getOrThrow('PAYMENT_PROVIDER');
+    }
+
+    get stripeSecretKey(): string | undefined {
+        return this.configService.get('STRIPE_SECRET_KEY');
+    }
+
+    get stripeWebhookSecret(): string | undefined {
+        return this.configService.get('STRIPE_WEBHOOK_SECRET');
+    }
+
+    get stripeCheckoutSuccessUrl(): string | undefined {
+        return this.configService.get('STRIPE_CHECKOUT_SUCCESS_URL');
+    }
+
+    get stripeCheckoutCancelUrl(): string | undefined {
+        return this.configService.get('STRIPE_CHECKOUT_CANCEL_URL');
+    }
+
+    get stripePortalReturnUrl(): string | undefined {
+        return this.configService.get('STRIPE_PORTAL_RETURN_URL');
+    }
 }

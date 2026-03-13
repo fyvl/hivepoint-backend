@@ -1,7 +1,9 @@
-# Mock Payments and Subscribe Flow
+# Subscribe and Payment Providers
 
 ## Purpose
-Implements a mock subscribe flow that creates a pending subscription and a draft invoice, returning a mock payment link. Mock endpoints simulate payment success/failure.
+Implements the subscribe flow that creates a pending subscription and a draft invoice, then delegates payment link creation to the active payment provider. Mock endpoints remain available for local development and smoke tests.
+
+The billing module can now switch `/billing/subscribe` between mock and Stripe checkout via `PAYMENT_PROVIDER`, while keeping mock endpoints available for local development and smoke tests.
 
 ## Subscribe flow
 `POST /billing/subscribe` performs:
@@ -10,7 +12,7 @@ Implements a mock subscribe flow that creates a pending subscription and a draft
 3. Prevent duplicates: active subscription to the same product -> `ALREADY_SUBSCRIBED`; pending subscription to the same product -> `SUBSCRIPTION_PENDING`.
 4. Create subscription with `status=PENDING`, `currentPeriodStart=null`, `currentPeriodEnd=null`, `cancelAtPeriodEnd=false`.
 5. Create invoice with `status=DRAFT`, `periodStart=now`, `periodEnd=now + 1 month` (UTC month increment).
-6. Return a mock `paymentLink` from the payment provider.
+6. Return a `paymentLink` from the active payment provider.
 
 ## Endpoints
 | Method | Path | Auth | Request | Response | Notes |
@@ -18,6 +20,7 @@ Implements a mock subscribe flow that creates a pending subscription and a draft
 | POST | `/billing/subscribe` | Bearer | `SubscribeDto` | `SubscribeResponseDto` | Creates subscription + invoice and returns `paymentLink`. |
 | POST | `/billing/mock/succeed` | `x-mock-payment-secret` header | Query: `invoiceId` | `MockPaymentResponseDto` | Sets invoice `PAID`, subscription `ACTIVE` with invoice period; idempotent if already `PAID`. |
 | POST | `/billing/mock/fail` | `x-mock-payment-secret` header | Query: `invoiceId` | `MockPaymentResponseDto` | Sets invoice `VOID`; subscription becomes `PAST_DUE` if not already `ACTIVE`; idempotent if already `VOID`. |
+| POST | `/billing/stripe/webhook` | Stripe signature header | Raw Stripe event body | `{ received: true }` | Consumes Stripe Checkout, invoice, and subscription lifecycle events. |
 
 ## Mock endpoint protection
 - Required header: `x-mock-payment-secret`
@@ -40,4 +43,4 @@ Implements a mock subscribe flow that creates a pending subscription and a draft
 
 ## Not implemented
 - The `paymentLink` points to `/billing/mock/pay`, but there is no handler for this route in code.
-- There is no real payment provider integration; only `MockPaymentProvider` is registered.
+- Full renewal lifecycle is not implemented yet; current Stripe integration covers checkout, local invoice sync for recurring Stripe invoices, portal access, and cancel-at-period-end sync.

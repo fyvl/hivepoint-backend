@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+    Body,
+    Controller,
+    Get,
+    Param,
+    Patch,
+    Post,
+    Query,
+    UseGuards,
+} from '@nestjs/common';
 import {
     ApiBearerAuth,
     ApiBody,
@@ -56,7 +65,8 @@ export class ProductsController {
     @ApiQuery({ name: 'limit', required: false, type: Number })
     @ApiQuery({ name: 'offset', required: false, type: Number })
     async listProducts(
-        @Query(new ZodValidationPipe(listProductsQuerySchema)) query: ListProductsQuery,
+        @Query(new ZodValidationPipe(listProductsQuerySchema))
+        query: ListProductsQuery,
     ): Promise<ProductListResponseDto> {
         const limit = Math.min(query.limit ?? 20, 100);
         const offset = query.offset ?? 0;
@@ -81,7 +91,8 @@ export class ProductsController {
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
     @ApiForbiddenResponse({ description: 'FORBIDDEN' })
     async listMyProducts(
-        @Query(new ZodValidationPipe(listProductsQuerySchema)) query: ListProductsQuery,
+        @Query(new ZodValidationPipe(listProductsQuerySchema))
+        query: ListProductsQuery,
         @User() user: AuthenticatedUser,
     ): Promise<ProductListResponseDto> {
         const limit = Math.min(query.limit ?? 20, 100);
@@ -133,7 +144,8 @@ export class ProductsController {
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
     @ApiForbiddenResponse({ description: 'FORBIDDEN' })
     async createProduct(
-        @Body(new ZodValidationPipe(createProductSchema)) body: CreateProductInput,
+        @Body(new ZodValidationPipe(createProductSchema))
+        body: CreateProductInput,
         @User() user: AuthenticatedUser,
     ): Promise<ProductDto> {
         return this.productsService.createProduct(body, user);
@@ -151,7 +163,8 @@ export class ProductsController {
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
     async updateProduct(
         @Param('id') id: string,
-        @Body(new ZodValidationPipe(updateProductSchema)) body: UpdateProductInput,
+        @Body(new ZodValidationPipe(updateProductSchema))
+        body: UpdateProductInput,
         @User() user: AuthenticatedUser,
     ): Promise<ProductDto> {
         return this.productsService.updateProduct(id, body, user);
@@ -169,7 +182,8 @@ export class ProductsController {
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
     async createVersion(
         @Param('id') id: string,
-        @Body(new ZodValidationPipe(createVersionSchema)) body: CreateVersionInput,
+        @Body(new ZodValidationPipe(createVersionSchema))
+        body: CreateVersionInput,
         @User() user: AuthenticatedUser,
     ): Promise<VersionDto> {
         return this.versionsService.createVersion(id, body, user);

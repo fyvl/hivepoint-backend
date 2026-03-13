@@ -44,7 +44,9 @@ export class KeysController {
     @ApiOperation({ summary: 'List API keys' })
     @ApiOkResponse({ type: ListKeysResponseDto })
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
-    async listKeys(@User() user: AuthenticatedUser): Promise<ListKeysResponseDto> {
+    async listKeys(
+        @User() user: AuthenticatedUser,
+    ): Promise<ListKeysResponseDto> {
         return this.keysService.listKeys(user);
     }
 

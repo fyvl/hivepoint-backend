@@ -25,8 +25,14 @@ cp .env.example .env
 - `COOKIE_SECURE`: `false` for local HTTP.
 - `REDIS_URL`: optional; Redis is in `docker-compose.yml` but not used in code yet.
 - `MOCK_PAYMENT_SECRET`: any non-empty string (used by `/billing/mock/*`).
+- `PAYMENT_PROVIDER`: `MOCK` by default; set `STRIPE` to enable Stripe Checkout + webhook flow.
+- `STRIPE_SECRET_KEY`: required when `PAYMENT_PROVIDER=STRIPE`.
+- `STRIPE_WEBHOOK_SECRET`: required when `PAYMENT_PROVIDER=STRIPE`.
+- `STRIPE_CHECKOUT_SUCCESS_URL`: frontend success route, for example `http://localhost:5173/billing/success`.
+- `STRIPE_CHECKOUT_CANCEL_URL`: frontend cancel route, for example `http://localhost:5173/billing/cancel`.
+- `STRIPE_PORTAL_RETURN_URL`: return URL for Stripe customer portal, for example `http://localhost:5173/billing`.
 - `API_KEY_SALT`: any non-empty string (used to hash API keys).
-- `USAGE_INGEST_SECRET`: any non-empty string (used by `/usage/record`).
+- `USAGE_INGEST_SECRET`: any non-empty string (used by `/usage/authorize` and `/usage/record`).
 
 ## Start infrastructure (Docker)
 ```bash
@@ -226,6 +232,26 @@ List subscriptions:
 curl -s "$BASE_URL/billing/subscriptions" -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
+### Stripe test mode setup
+1) Set `PAYMENT_PROVIDER=STRIPE` in `.env`.
+2) Fill `STRIPE_SECRET_KEY` with your Stripe test secret key (`sk_test_...`).
+3) Start the backend:
+```bash
+npm run start:dev
+```
+4) In another terminal, forward Stripe webhooks to the local backend:
+```bash
+stripe listen --forward-to localhost:3000/billing/stripe/webhook
+```
+5) Copy the webhook signing secret printed by Stripe CLI into `STRIPE_WEBHOOK_SECRET`.
+6) Restart the backend after updating `.env`.
+7) Use Stripe test cards during checkout.
+
+Useful references:
+- Stripe testing overview: https://docs.stripe.com/testing/overview
+- Stripe CLI webhook forwarding: https://docs.stripe.com/webhooks?lang=node&locale=en-GB#forward-events-to-a-local-endpoint
+- Stripe test cards: https://docs.stripe.com/testing?lang=php#cards
+
 ### 5) Keys
 Create key:
 ```bash
@@ -246,7 +272,49 @@ KEY_ID=...
 curl -s -X POST "$BASE_URL/keys/$KEY_ID/revoke" -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
-### 6) Usage
+### 6) Gateway
+Dispatch a request through the explicit gateway envelope:
+```bash
+RAW_API_KEY=... # returned by POST /keys
+PRODUCT_ID=...
+curl -s -X POST "$BASE_URL/gateway/dispatch" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $RAW_API_KEY" \
+  -d '{
+    "productId":"'$PRODUCT_ID'",
+    "path":"/health",
+    "method":"GET",
+    "requestCount":1
+  }'
+```
+
+Proxy a direct request through HivePoint without the dispatch envelope:
+```bash
+RAW_API_KEY=... # returned by POST /keys
+PRODUCT_ID=...
+curl -i -X POST "$BASE_URL/gateway/products/$PRODUCT_ID/echo" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $RAW_API_KEY" \
+  -d '{"message":"hello"}'
+```
+
+The proxy response preserves the upstream status/body and adds HivePoint runtime headers such as:
+- `x-hivepoint-subscription-id`
+- `x-hivepoint-remaining-requests`
+- `x-hivepoint-usage-recorded`
+
+### 7) Usage
+Authorize by raw API key and product (internal entitlement check):
+```bash
+USAGE_SECRET=... # from .env
+RAW_API_KEY=... # returned by POST /keys
+PRODUCT_ID=...
+curl -s -X POST "$BASE_URL/usage/authorize" \
+  -H "Content-Type: application/json" \
+  -H "x-usage-secret: $USAGE_SECRET" \
+  -d '{"apiKey":"'$RAW_API_KEY'","productId":"'$PRODUCT_ID'","endpoint":"/v1/search","requestCount":1,"consume":false}'
+```
+
 Ingest record (internal):
 ```bash
 USAGE_SECRET=... # from .env
@@ -266,4 +334,5 @@ curl -s "$BASE_URL/usage/summary" -H "Authorization: Bearer $ACCESS_TOKEN"
 - Prisma can't connect: verify `DATABASE_URL`, ensure Postgres is running (`docker compose ps`).
 - CORS/cookies not working: ensure `CORS_ORIGINS` includes your frontend origin and `COOKIE_SECURE=false` for HTTP.
 - Mock payment forbidden: verify `x-mock-payment-secret` header matches `MOCK_PAYMENT_SECRET`.
-- Usage ingest forbidden: verify `x-usage-secret` header matches `USAGE_INGEST_SECRET`.
+- Usage endpoints forbidden: verify `x-usage-secret` header matches `USAGE_INGEST_SECRET`.
+

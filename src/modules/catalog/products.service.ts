@@ -29,7 +29,9 @@ const productSelect = {
 export class ProductsService {
     constructor(private readonly prisma: PrismaService) {}
 
-    async listPublicProducts(params: ListProductsQuery & { limit: number; offset: number }): Promise<ProductListResponseDto> {
+    async listPublicProducts(
+        params: ListProductsQuery & { limit: number; offset: number },
+    ): Promise<ProductListResponseDto> {
         const where: Prisma.ApiProductWhereInput = {
             status: ProductStatus.PUBLISHED,
         };
@@ -67,7 +69,11 @@ export class ProductsService {
     }
 
     async listManagedProducts(
-        params: ListProductsQuery & { limit: number; offset: number; ownerId?: string },
+        params: ListProductsQuery & {
+            limit: number;
+            offset: number;
+            ownerId?: string;
+        },
     ): Promise<ProductListResponseDto> {
         const where: Prisma.ApiProductWhereInput = {};
 
@@ -107,7 +113,10 @@ export class ProductsService {
         };
     }
 
-    async getProductById(id: string, user?: AuthenticatedUser): Promise<ProductDto> {
+    async getProductById(
+        id: string,
+        user?: AuthenticatedUser,
+    ): Promise<ProductDto> {
         const product = await this.prisma.apiProduct.findUnique({
             where: { id },
             select: productSelect,
@@ -142,7 +151,10 @@ export class ProductsService {
         return product;
     }
 
-    async createProduct(input: CreateProductInput, user: AuthenticatedUser): Promise<ProductDto> {
+    async createProduct(
+        input: CreateProductInput,
+        user: AuthenticatedUser,
+    ): Promise<ProductDto> {
         return this.prisma.apiProduct.create({
             data: {
                 ownerId: user.id,
@@ -186,7 +198,10 @@ export class ProductsService {
             });
         }
 
-        if (input.status && !this.isProductStatusTransitionAllowed(product.status, input.status)) {
+        if (
+            input.status &&
+            !this.isProductStatusTransitionAllowed(product.status, input.status)
+        ) {
             throw new AppError({
                 code: ErrorCodes.VALIDATION_ERROR,
                 message: 'INVALID_STATUS_TRANSITION',
@@ -238,15 +253,24 @@ export class ProductsService {
             return true;
         }
 
-        if (current === ProductStatus.DRAFT && next === ProductStatus.PUBLISHED) {
+        if (
+            current === ProductStatus.DRAFT &&
+            next === ProductStatus.PUBLISHED
+        ) {
             return true;
         }
 
-        if (current === ProductStatus.PUBLISHED && next === ProductStatus.HIDDEN) {
+        if (
+            current === ProductStatus.PUBLISHED &&
+            next === ProductStatus.HIDDEN
+        ) {
             return true;
         }
 
-        if (current === ProductStatus.HIDDEN && next === ProductStatus.PUBLISHED) {
+        if (
+            current === ProductStatus.HIDDEN &&
+            next === ProductStatus.PUBLISHED
+        ) {
             return true;
         }
 

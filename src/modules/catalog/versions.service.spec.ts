@@ -107,7 +107,10 @@ describe('VersionsService', () => {
         await expect(
             service.createVersion(
                 'product-1',
-                { version: 'v1', openApiUrl: 'https://example.com/openapi.json' },
+                {
+                    version: 'v1',
+                    openApiUrl: 'https://example.com/openapi.json',
+                },
                 user,
             ),
         ).rejects.toMatchObject({
@@ -137,7 +140,10 @@ describe('VersionsService', () => {
         await expect(
             service.createVersion(
                 'product-1',
-                { version: 'v1', openApiUrl: 'https://example.com/openapi.json' },
+                {
+                    version: 'v1',
+                    openApiUrl: 'https://example.com/openapi.json',
+                },
                 user,
             ),
         ).rejects.toMatchObject({

@@ -1,7 +1,11 @@
 import { Role } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { AppConfigService } from '../../common/config/config.service';
-import { hashPassword, hashToken, verifyPassword } from '../../common/utils/crypto';
+import {
+    hashPassword,
+    hashToken,
+    verifyPassword,
+} from '../../common/utils/crypto';
 import { AuthService } from './auth.service';
 
 const createConfigService = (): AppConfigService =>
@@ -10,7 +14,7 @@ const createConfigService = (): AppConfigService =>
         jwtRefreshSecret: 'refresh-secret',
         jwtAccessTtlSeconds: 900,
         jwtRefreshTtlSeconds: 3600,
-    } as AppConfigService);
+    }) as AppConfigService;
 
 const createPrismaMock = () => ({
     user: {

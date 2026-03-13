@@ -19,7 +19,10 @@ export class KeysService {
         private readonly configService: ConfigService<Env, true>,
     ) {}
 
-    async createKey(input: CreateKeyInput, user: AuthenticatedUser): Promise<CreateKeyResponseDto> {
+    async createKey(
+        input: CreateKeyInput,
+        user: AuthenticatedUser,
+    ): Promise<CreateKeyResponseDto> {
         const rawKey = generateRawApiKey();
         const salt = this.configService.getOrThrow<string>('API_KEY_SALT');
         const keyHash = hashApiKey(rawKey, salt);
@@ -65,7 +68,10 @@ export class KeysService {
         return { items };
     }
 
-    async revokeKey(keyId: string, user: AuthenticatedUser): Promise<RevokeKeyResponseDto> {
+    async revokeKey(
+        keyId: string,
+        user: AuthenticatedUser,
+    ): Promise<RevokeKeyResponseDto> {
         const apiKey = await this.prisma.apiKey.findUnique({
             where: { id: keyId },
             select: {

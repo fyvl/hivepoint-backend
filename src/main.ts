@@ -7,7 +7,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { OpenApiService } from './common/openapi/openapi.service';
 
 async function bootstrap(): Promise<void> {
-    const app = await NestFactory.create(AppModule);
+    const app = await NestFactory.create(AppModule, { rawBody: true });
     app.enableShutdownHooks();
 
     const configService = app.get(AppConfigService);

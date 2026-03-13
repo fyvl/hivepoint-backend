@@ -31,7 +31,9 @@ export class AdminController {
     @ApiNotFoundResponse({ description: 'PRODUCT_NOT_FOUND' })
     @ApiForbiddenResponse({ description: 'FORBIDDEN' })
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
-    async hideProduct(@Param('id') id: string): Promise<HideProductResponseDto> {
+    async hideProduct(
+        @Param('id') id: string,
+    ): Promise<HideProductResponseDto> {
         return this.adminService.hideProduct(id);
     }
 
@@ -41,7 +43,9 @@ export class AdminController {
     @ApiNotFoundResponse({ description: 'VERSION_NOT_FOUND' })
     @ApiForbiddenResponse({ description: 'FORBIDDEN' })
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
-    async hideVersion(@Param('id') id: string): Promise<HideVersionResponseDto> {
+    async hideVersion(
+        @Param('id') id: string,
+    ): Promise<HideVersionResponseDto> {
         return this.adminService.hideVersion(id);
     }
 

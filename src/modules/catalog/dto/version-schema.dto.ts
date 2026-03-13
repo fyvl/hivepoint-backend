@@ -16,6 +16,8 @@ export class VersionSchemaDto {
     @ApiProperty({ type: String, format: 'date-time', nullable: true })
     fetchedAt!: Date | null;
 
-    @ApiProperty({ example: '{\"openapi\":\"3.0.0\",\"info\":{\"title\":\"Sample\"}}' })
+    @ApiProperty({
+        example: '{"openapi":"3.0.0","info":{"title":"Sample"}}',
+    })
     schema!: string;
 }

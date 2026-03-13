@@ -3,7 +3,12 @@ export class AppError extends Error {
     readonly details?: unknown;
     readonly httpStatus: number;
 
-    constructor(params: { code: string; message: string; httpStatus: number; details?: unknown }) {
+    constructor(params: {
+        code: string;
+        message: string;
+        httpStatus: number;
+        details?: unknown;
+    }) {
         super(params.message);
         this.code = params.code;
         this.details = params.details;

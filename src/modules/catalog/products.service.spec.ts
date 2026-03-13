@@ -86,8 +86,10 @@ describe('ProductsService', () => {
             updatedAt: new Date(),
         });
 
-        await expect(service.getProductById('product-1')).rejects.toMatchObject({
-            code: ErrorCodes.PRODUCT_NOT_PUBLIC,
-        });
+        await expect(service.getProductById('product-1')).rejects.toMatchObject(
+            {
+                code: ErrorCodes.PRODUCT_NOT_PUBLIC,
+            },
+        );
     });
 });

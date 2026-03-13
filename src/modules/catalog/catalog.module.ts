@@ -11,6 +11,12 @@ import { OptionalJwtGuard } from './guards/optional-jwt.guard';
 @Module({
     imports: [PrismaModule],
     controllers: [ProductsController, VersionsController],
-    providers: [ProductsService, VersionsService, JwtGuard, RolesGuard, OptionalJwtGuard],
+    providers: [
+        ProductsService,
+        VersionsService,
+        JwtGuard,
+        RolesGuard,
+        OptionalJwtGuard,
+    ],
 })
 export class CatalogModule {}

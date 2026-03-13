@@ -35,7 +35,10 @@ describe('KeysService', () => {
             getOrThrow: jest.fn().mockReturnValue('salt'),
         } as unknown as ConfigService<Env, true>;
 
-        service = new KeysService(prisma as unknown as PrismaService, configService);
+        service = new KeysService(
+            prisma as unknown as PrismaService,
+            configService,
+        );
     });
 
     afterEach(() => {
@@ -44,7 +47,9 @@ describe('KeysService', () => {
 
     it('createKey returns rawKey and stores hash', async () => {
         const rawKey = 'hp_test_key';
-        const rawKeySpy = jest.spyOn(cryptoUtils, 'generateRawApiKey').mockReturnValue(rawKey);
+        const rawKeySpy = jest
+            .spyOn(cryptoUtils, 'generateRawApiKey')
+            .mockReturnValue(rawKey);
         const createdAt = new Date('2026-01-01T00:00:00.000Z');
 
         prisma.apiKey.create.mockResolvedValue({
@@ -61,7 +66,9 @@ describe('KeysService', () => {
 
         const result = await service.createKey({ label: 'My key' }, user);
 
-        const expectedHash = createHash('sha256').update(rawKey + 'salt').digest('hex');
+        const expectedHash = createHash('sha256')
+            .update(rawKey + 'salt')
+            .digest('hex');
 
         expect(rawKeySpy).toHaveBeenCalled();
         expect(prisma.apiKey.create).toHaveBeenCalledWith(

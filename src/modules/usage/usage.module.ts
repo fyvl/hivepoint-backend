@@ -8,5 +8,6 @@ import { UsageService } from './usage.service';
     imports: [PrismaModule],
     controllers: [UsageController],
     providers: [UsageService, JwtGuard],
+    exports: [UsageService],
 })
 export class UsageModule {}

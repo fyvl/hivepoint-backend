@@ -8,6 +8,10 @@ export class RegisterDto {
     @ApiProperty({ minLength: 8 })
     password!: string;
 
-    @ApiProperty({ enum: [Role.BUYER, Role.SELLER], required: false, default: Role.BUYER })
+    @ApiProperty({
+        enum: [Role.BUYER, Role.SELLER],
+        required: false,
+        default: Role.BUYER,
+    })
     role?: 'BUYER' | 'SELLER';
 }

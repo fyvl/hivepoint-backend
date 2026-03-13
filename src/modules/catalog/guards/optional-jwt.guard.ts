@@ -46,7 +46,10 @@ export class OptionalJwtGuard implements CanActivate {
 
         let payload: AccessTokenPayload;
         try {
-            const decoded = jwt.verify(token, this.configService.jwtAccessSecret);
+            const decoded = jwt.verify(
+                token,
+                this.configService.jwtAccessSecret,
+            );
             if (typeof decoded === 'string') {
                 throw new Error('Invalid token payload');
             }

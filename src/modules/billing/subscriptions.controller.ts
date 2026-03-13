@@ -17,6 +17,9 @@ import { ZodValidationPipe } from '../../common/utils/zod-validation.pipe';
 import { subscribeSchema } from './billing.schemas';
 import type { SubscribeInput } from './billing.schemas';
 import { CancelSubscriptionResponseDto } from './dto/cancel-subscription-response.dto';
+import { BillingPortalSessionResponseDto } from './dto/billing-portal-session-response.dto';
+import { BillingConfigResponseDto } from './dto/billing-config-response.dto';
+import { CheckoutStatusDto } from './dto/checkout-status.dto';
 import { SubscriptionListResponseDto } from './dto/list-subscriptions.dto';
 import { SubscribeDto } from './dto/subscribe.dto';
 import { SubscribeResponseDto } from './dto/subscribe-response.dto';
@@ -39,6 +42,44 @@ export class SubscriptionsController {
         return this.subscriptionsService.listUserSubscriptions(user);
     }
 
+    @Get('config')
+    @UseGuards(JwtGuard)
+    @ApiBearerAuth('bearer')
+    @ApiOperation({ summary: 'Get billing runtime configuration' })
+    @ApiOkResponse({ type: BillingConfigResponseDto })
+    @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
+    getBillingConfig(): BillingConfigResponseDto {
+        return this.subscriptionsService.getBillingConfig();
+    }
+
+    @Post('portal-session')
+    @UseGuards(JwtGuard)
+    @ApiBearerAuth('bearer')
+    @ApiOperation({ summary: 'Create customer billing portal session' })
+    @ApiOkResponse({ type: BillingPortalSessionResponseDto })
+    @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
+    async createPortalSession(
+        @User() user: AuthenticatedUser,
+    ): Promise<BillingPortalSessionResponseDto> {
+        return this.subscriptionsService.createPortalSession(user);
+    }
+
+    @Get('checkout-status/:sessionId')
+    @UseGuards(JwtGuard)
+    @ApiBearerAuth('bearer')
+    @ApiOperation({
+        summary: 'Get checkout session sync status for current user',
+    })
+    @ApiOkResponse({ type: CheckoutStatusDto })
+    @ApiNotFoundResponse({ description: 'CHECKOUT_SESSION_NOT_FOUND' })
+    @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
+    async getCheckoutStatus(
+        @Param('sessionId') sessionId: string,
+        @User() user: AuthenticatedUser,
+    ): Promise<CheckoutStatusDto> {
+        return this.subscriptionsService.getCheckoutStatus(sessionId, user);
+    }
+
     @Post('subscribe')
     @UseGuards(JwtGuard)
     @ApiBearerAuth('bearer')
@@ -46,7 +87,9 @@ export class SubscriptionsController {
     @ApiBody({ type: SubscribeDto })
     @ApiOkResponse({ type: SubscribeResponseDto })
     @ApiNotFoundResponse({ description: 'PLAN_NOT_FOUND or PRODUCT_NOT_FOUND' })
-    @ApiConflictResponse({ description: 'ALREADY_SUBSCRIBED or SUBSCRIPTION_PENDING' })
+    @ApiConflictResponse({
+        description: 'ALREADY_SUBSCRIBED or SUBSCRIPTION_PENDING',
+    })
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
     async subscribe(
         @Body(new ZodValidationPipe(subscribeSchema)) body: SubscribeInput,

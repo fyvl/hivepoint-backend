@@ -86,7 +86,11 @@ export class AuthController {
     }
 
     private setRefreshCookie(response: Response, refreshToken: string): void {
-        response.cookie('refreshToken', refreshToken, this.getRefreshCookieOptions());
+        response.cookie(
+            'refreshToken',
+            refreshToken,
+            this.getRefreshCookieOptions(),
+        );
     }
 
     private getRefreshCookieOptions(): {
@@ -110,7 +114,9 @@ export class AuthController {
     }
 
     private getRefreshTokenFromCookies(request: Request): string | undefined {
-        const cookies = request.cookies as { refreshToken?: unknown } | undefined;
+        const cookies = request.cookies as
+            | { refreshToken?: unknown }
+            | undefined;
         const token = cookies?.refreshToken;
         return typeof token === 'string' ? token : undefined;
     }

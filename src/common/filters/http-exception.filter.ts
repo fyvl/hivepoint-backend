@@ -40,7 +40,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
             const responseBody = exception.getResponse();
             if (typeof responseBody === 'string') {
                 message = responseBody;
-            } else if (typeof responseBody === 'object' && responseBody !== null) {
+            } else if (
+                typeof responseBody === 'object' &&
+                responseBody !== null
+            ) {
                 const payload = responseBody as {
                     message?: string | string[];
                     code?: string;
