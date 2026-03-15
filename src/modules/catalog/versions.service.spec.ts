@@ -1,4 +1,5 @@
 import { ProductStatus, Role, VersionStatus } from '@prisma/client';
+import { AppConfigService } from '../../common/config/config.service';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { VersionsService } from './versions.service';
@@ -18,6 +19,7 @@ type PrismaMock = {
 describe('VersionsService', () => {
     let service: VersionsService;
     let prisma: PrismaMock;
+    let configService: AppConfigService;
     let fetchMock: jest.Mock;
     const originalFetch = global.fetch;
 
@@ -37,7 +39,14 @@ describe('VersionsService', () => {
         fetchMock = jest.fn();
         global.fetch = fetchMock as typeof fetch;
 
-        service = new VersionsService(prisma as unknown as PrismaService);
+        configService = {
+            allowPrivateNetworkTargets: true,
+        } as AppConfigService;
+
+        service = new VersionsService(
+            prisma as unknown as PrismaService,
+            configService,
+        );
     });
 
     afterAll(() => {

@@ -22,14 +22,17 @@ type PrismaMock = {
         create: jest.Mock;
         groupBy: jest.Mock;
     };
+    $transaction: jest.Mock;
 };
 
 describe('UsageService', () => {
     let service: UsageService;
     let prisma: PrismaMock;
     let configService: ConfigService<Env, true>;
+    let txExecuteRaw: jest.Mock;
 
     beforeEach(() => {
+        txExecuteRaw = jest.fn();
         prisma = {
             apiKey: {
                 findFirst: jest.fn(),
@@ -47,6 +50,12 @@ describe('UsageService', () => {
                 create: jest.fn(),
                 groupBy: jest.fn(),
             },
+            $transaction: jest.fn(async (callback) =>
+                callback({
+                    ...prisma,
+                    $executeRaw: txExecuteRaw,
+                }),
+            ),
         };
 
         configService = {
@@ -156,6 +165,7 @@ describe('UsageService', () => {
                 requestCount: 2,
             },
         });
+        expect(txExecuteRaw).toHaveBeenCalled();
         expect(result).toEqual({
             allowed: true,
             apiKeyId: 'key-1',

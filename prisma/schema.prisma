@@ -103,6 +103,7 @@ model ApiVersion {
     product    ApiProduct    @relation(fields: [productId], references: [id], onDelete: Cascade)
 
     @@index([productId])
+    @@unique([productId, version])
 }
 
 model Plan {

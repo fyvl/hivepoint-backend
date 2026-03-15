@@ -3,6 +3,7 @@ import { AppConfigService } from '../../common/config/config.service';
 import { JwtGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { PrismaModule } from '../../common/prisma/prisma.module';
+import { OptionalJwtGuard } from '../catalog/guards/optional-jwt.guard';
 import { MockPaymentGuard } from './guards/mock-payment.guard';
 import { MockPaymentProvider } from './payment/mock-payment.provider';
 import { PAYMENT_PROVIDER } from './payment/payment.provider';
@@ -29,6 +30,7 @@ import { SubscriptionsService } from './subscriptions.service';
         SubscriptionsService,
         JwtGuard,
         RolesGuard,
+        OptionalJwtGuard,
         MockPaymentGuard,
         MockPaymentProvider,
         StripeClientService,

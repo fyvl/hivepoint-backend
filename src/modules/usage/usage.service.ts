@@ -238,6 +238,18 @@ export class UsageService {
             };
         }
 
+        const shouldConsume = input.consume ?? false;
+        if (shouldConsume) {
+            return this.authorizeUsageWithConsumption({
+                apiKeyId: apiKey.id,
+                userId: apiKey.userId,
+                productId: input.productId,
+                endpoint: input.endpoint,
+                requestCount: input.requestCount,
+                occurredAt,
+            });
+        }
+
         const usageAggregate = await this.prisma.usageRecord.aggregate({
             where: {
                 subscriptionId: subscription.id,
@@ -279,20 +291,6 @@ export class UsageService {
             };
         }
 
-        const shouldConsume = input.consume ?? false;
-        if (shouldConsume) {
-            await this.createUsageRecord({
-                subscriptionId: subscription.id,
-                occurredAt: occurredAt.toISOString(),
-                endpoint: input.endpoint,
-                requestCount: requestedRequests,
-            });
-        }
-
-        const finalUsedRequests = shouldConsume
-            ? nextUsedRequests
-            : usedRequests;
-
         return {
             allowed: true,
             apiKeyId: apiKey.id,
@@ -300,11 +298,11 @@ export class UsageService {
             userId: subscription.userId,
             periodStart: subscription.currentPeriodStart,
             periodEnd: subscription.currentPeriodEnd,
-            usedRequests: finalUsedRequests,
+            usedRequests,
             requestedRequests,
             quotaRequests,
-            remainingRequests: Math.max(0, quotaRequests - finalUsedRequests),
-            usageRecorded: shouldConsume,
+            remainingRequests: Math.max(0, quotaRequests - usedRequests),
+            usageRecorded: false,
             plan: {
                 id: subscription.plan.id,
                 name: subscription.plan.name,
@@ -312,6 +310,149 @@ export class UsageService {
             },
             product: subscription.plan.product,
         };
+    }
+
+    private async authorizeUsageWithConsumption(params: {
+        apiKeyId: string;
+        userId: string;
+        productId: string;
+        endpoint: string;
+        requestCount: number;
+        occurredAt: Date;
+    }): Promise<AuthorizeUsageResponseDto> {
+        return this.prisma.$transaction(async (tx) => {
+            const subscription = await tx.subscription.findFirst({
+                where: {
+                    userId: params.userId,
+                    status: SubscriptionStatus.ACTIVE,
+                    currentPeriodStart: {
+                        lte: params.occurredAt,
+                    },
+                    currentPeriodEnd: {
+                        gt: params.occurredAt,
+                    },
+                    plan: {
+                        productId: params.productId,
+                    },
+                },
+                select: {
+                    id: true,
+                    userId: true,
+                    currentPeriodStart: true,
+                    currentPeriodEnd: true,
+                    plan: {
+                        select: {
+                            id: true,
+                            name: true,
+                            quotaRequests: true,
+                            product: {
+                                select: {
+                                    id: true,
+                                    title: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+
+            if (
+                !subscription ||
+                !subscription.currentPeriodStart ||
+                !subscription.currentPeriodEnd
+            ) {
+                return {
+                    allowed: false,
+                    reason: 'NO_ACTIVE_SUBSCRIPTION',
+                    apiKeyId: params.apiKeyId,
+                    userId: params.userId,
+                    requestedRequests: params.requestCount,
+                    usageRecorded: false,
+                };
+            }
+
+            await tx.$executeRaw`
+                SELECT 1
+                FROM "Subscription"
+                WHERE "id" = ${subscription.id}
+                FOR UPDATE
+            `;
+
+            const usageAggregate = await tx.usageRecord.aggregate({
+                where: {
+                    subscriptionId: subscription.id,
+                    occurredAt: {
+                        gte: subscription.currentPeriodStart,
+                        lt: subscription.currentPeriodEnd,
+                    },
+                },
+                _sum: {
+                    requestCount: true,
+                },
+            });
+
+            const usedRequests = usageAggregate._sum.requestCount ?? 0;
+            const quotaRequests = subscription.plan.quotaRequests;
+            const nextUsedRequests = usedRequests + params.requestCount;
+
+            if (nextUsedRequests > quotaRequests) {
+                return {
+                    allowed: false,
+                    reason: 'QUOTA_EXCEEDED',
+                    apiKeyId: params.apiKeyId,
+                    subscriptionId: subscription.id,
+                    userId: subscription.userId,
+                    periodStart: subscription.currentPeriodStart,
+                    periodEnd: subscription.currentPeriodEnd,
+                    usedRequests,
+                    requestedRequests: params.requestCount,
+                    quotaRequests,
+                    remainingRequests: Math.max(
+                        0,
+                        quotaRequests - usedRequests,
+                    ),
+                    usageRecorded: false,
+                    plan: {
+                        id: subscription.plan.id,
+                        name: subscription.plan.name,
+                        quotaRequests: subscription.plan.quotaRequests,
+                    },
+                    product: subscription.plan.product,
+                };
+            }
+
+            await tx.usageRecord.create({
+                data: {
+                    subscriptionId: subscription.id,
+                    occurredAt: params.occurredAt,
+                    endpoint: params.endpoint,
+                    requestCount: params.requestCount,
+                },
+            });
+
+            return {
+                allowed: true,
+                apiKeyId: params.apiKeyId,
+                subscriptionId: subscription.id,
+                userId: subscription.userId,
+                periodStart: subscription.currentPeriodStart,
+                periodEnd: subscription.currentPeriodEnd,
+                usedRequests: nextUsedRequests,
+                requestedRequests: params.requestCount,
+                quotaRequests,
+                remainingRequests: Math.max(
+                    0,
+                    quotaRequests - nextUsedRequests,
+                ),
+                usageRecorded: true,
+                plan: {
+                    id: subscription.plan.id,
+                    name: subscription.plan.name,
+                    quotaRequests: subscription.plan.quotaRequests,
+                },
+                product: subscription.plan.product,
+            };
+        });
     }
 
     private async createUsageRecord(input: RecordUsageInput): Promise<void> {

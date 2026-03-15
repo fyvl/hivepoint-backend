@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ProductStatus, VersionStatus } from '@prisma/client';
+import { AppConfigService } from '../../common/config/config.service';
 import { AppError } from '../../common/errors/app.error';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { assertSafeExternalHttpUrl } from '../../common/utils/external-url';
 import { UsageService } from '../usage/usage.service';
 import { GatewayDispatchResponseDto } from './dto/gateway-dispatch-response.dto';
 import type { GatewayDispatchInput } from './gateway.schemas';
@@ -32,6 +34,7 @@ export class GatewayService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly usageService: UsageService,
+        private readonly configService: AppConfigService,
     ) {}
 
     async dispatch(
@@ -129,7 +132,7 @@ export class GatewayService {
             endpoint: normalizedPath,
             requestCount: input.requestCount,
             occurredAt,
-            consume: false,
+            consume: true,
         });
 
         if (!authorization.allowed) {
@@ -144,39 +147,17 @@ export class GatewayService {
             });
         }
 
-        const upstreamBaseUrl = this.resolveUpstreamBaseUrl(
+        const upstreamBaseUrl = await this.resolveUpstreamBaseUrl(
             version.openApiSnapshot,
             version.openApiUrl,
         );
-        const upstreamUrl = this.buildUpstreamUrl(
+        const upstreamUrl = await this.buildUpstreamUrl(
             upstreamBaseUrl,
             normalizedPath,
             input.query,
         );
         const response = await this.fetchUpstream(upstreamUrl, input);
         const { parsedBody, rawBody } = await this.parseResponseBody(response);
-
-        let usageRecorded = false;
-        try {
-            await this.usageService.recordAuthorizedUsage({
-                subscriptionId: authorization.subscriptionId,
-                endpoint: normalizedPath,
-                requestCount: input.requestCount,
-                occurredAt,
-            });
-            usageRecorded = true;
-        } catch {
-            usageRecorded = false;
-        }
-
-        const remainingRequests =
-            typeof authorization.remainingRequests === 'number'
-                ? Math.max(
-                      0,
-                      authorization.remainingRequests -
-                          (usageRecorded ? input.requestCount : 0),
-                  )
-                : null;
 
         return {
             ok: response.ok,
@@ -190,8 +171,11 @@ export class GatewayService {
             usage: {
                 subscriptionId: authorization.subscriptionId,
                 requestCount: input.requestCount,
-                remainingRequests,
-                usageRecorded,
+                remainingRequests:
+                    typeof authorization.remainingRequests === 'number'
+                        ? authorization.remainingRequests
+                        : null,
+                usageRecorded: authorization.usageRecorded === true,
                 periodEnd: authorization.periodEnd ?? null,
             },
         };
@@ -231,10 +215,10 @@ export class GatewayService {
         return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
     }
 
-    private resolveUpstreamBaseUrl(
+    private async resolveUpstreamBaseUrl(
         openApiSnapshot: string | null,
         openApiUrl: string,
-    ): string {
+    ): Promise<string> {
         const serverUrl = this.extractServerUrl(openApiSnapshot);
         if (!serverUrl) {
             throw new AppError({
@@ -244,8 +228,9 @@ export class GatewayService {
             });
         }
 
+        let resolvedUrl: string;
         try {
-            return new URL(serverUrl, openApiUrl).toString();
+            resolvedUrl = new URL(serverUrl, openApiUrl).toString();
         } catch {
             throw new AppError({
                 code: ErrorCodes.GATEWAY_TARGET_NOT_CONFIGURED,
@@ -253,6 +238,15 @@ export class GatewayService {
                 httpStatus: 502,
             });
         }
+
+        await assertSafeExternalHttpUrl(resolvedUrl, {
+            allowPrivateNetworkTargets:
+                this.configService.allowPrivateNetworkTargets,
+            message: 'UPSTREAM_URL_NOT_ALLOWED',
+            httpStatus: 502,
+        });
+
+        return resolvedUrl;
     }
 
     private extractServerUrl(
@@ -345,11 +339,11 @@ export class GatewayService {
         return `${scheme}://${host}${basePath}`;
     }
 
-    private buildUpstreamUrl(
+    private async buildUpstreamUrl(
         upstreamBaseUrl: string,
         path: string,
         query: Record<string, string | number | boolean>,
-    ): string {
+    ): Promise<string> {
         const baseUrl = new URL(upstreamBaseUrl);
         const [pathOnly, inlineQuery] = path.split('?', 2);
         const normalizedBasePath = baseUrl.pathname.endsWith('/')
@@ -370,7 +364,15 @@ export class GatewayService {
         });
         baseUrl.search = searchParams.toString();
 
-        return baseUrl.toString();
+        const upstreamUrl = baseUrl.toString();
+        await assertSafeExternalHttpUrl(upstreamUrl, {
+            allowPrivateNetworkTargets:
+                this.configService.allowPrivateNetworkTargets,
+            message: 'UPSTREAM_URL_NOT_ALLOWED',
+            httpStatus: 502,
+        });
+
+        return upstreamUrl;
     }
 
     private async fetchUpstream(

@@ -46,6 +46,10 @@ export class AppConfigService {
         return this.configService.getOrThrow('COOKIE_SECURE');
     }
 
+    get allowPrivateNetworkTargets(): boolean {
+        return this.configService.getOrThrow('ALLOW_PRIVATE_NETWORK_TARGETS');
+    }
+
     get redisUrl(): string | undefined {
         return this.configService.get('REDIS_URL');
     }

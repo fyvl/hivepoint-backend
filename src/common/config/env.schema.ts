@@ -40,6 +40,7 @@ export const envSchema = z
             z.string().min(1).optional(),
         ),
         COOKIE_SECURE: booleanFromString.default(false),
+        ALLOW_PRIVATE_NETWORK_TARGETS: booleanFromString.default(false),
         REDIS_URL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
         PAYMENT_PROVIDER: z.enum(['MOCK', 'STRIPE']).default('MOCK'),
         MOCK_PAYMENT_SECRET: z.string().min(1),

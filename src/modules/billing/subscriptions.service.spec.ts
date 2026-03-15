@@ -1,8 +1,10 @@
 import {
     BillingProvider,
     InvoiceStatus,
+    ProductStatus,
     Role,
     SubscriptionStatus,
+    VersionStatus,
 } from '@prisma/client';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -15,8 +17,8 @@ type PrismaMock = {
     plan: {
         findUnique: jest.Mock;
     };
-    apiProduct: {
-        findUnique: jest.Mock;
+    apiVersion: {
+        findFirst: jest.Mock;
     };
     subscription: {
         findFirst: jest.Mock;
@@ -39,14 +41,16 @@ describe('SubscriptionsService', () => {
     let activePaymentProvider: jest.Mocked<PaymentProvider>;
     let mockPaymentProvider: jest.Mocked<PaymentProvider>;
     let stripePaymentProvider: jest.Mocked<PaymentProvider>;
+    let txExecuteRaw: jest.Mock;
 
     beforeEach(() => {
+        txExecuteRaw = jest.fn();
         prisma = {
             plan: {
                 findUnique: jest.fn(),
             },
-            apiProduct: {
-                findUnique: jest.fn(),
+            apiVersion: {
+                findFirst: jest.fn(),
             },
             subscription: {
                 findFirst: jest.fn(),
@@ -60,7 +64,12 @@ describe('SubscriptionsService', () => {
                 create: jest.fn(),
                 update: jest.fn(),
             },
-            $transaction: jest.fn(async (callback) => callback(prisma)),
+            $transaction: jest.fn(async (callback) =>
+                callback({
+                    ...prisma,
+                    $executeRaw: txExecuteRaw,
+                }),
+            ),
         };
 
         activePaymentProvider = {
@@ -100,12 +109,14 @@ describe('SubscriptionsService', () => {
             isActive: true,
             product: {
                 title: 'Payments API',
+                status: ProductStatus.PUBLISHED,
             },
         });
-        prisma.apiProduct.findUnique.mockResolvedValue({ id: 'product-1' });
-        prisma.subscription.findFirst
-            .mockResolvedValueOnce(null)
-            .mockResolvedValueOnce(null);
+        prisma.apiVersion.findFirst.mockResolvedValue({
+            id: 'ver-1',
+            status: VersionStatus.PUBLISHED,
+        });
+        prisma.subscription.findFirst.mockResolvedValueOnce(null);
         prisma.subscription.create.mockResolvedValue({ id: 'sub-1' });
         prisma.invoice.create.mockResolvedValue({ id: 'inv-1' });
         activePaymentProvider.createPayment.mockResolvedValue({
@@ -158,11 +169,16 @@ describe('SubscriptionsService', () => {
             isActive: true,
             product: {
                 title: 'Payments API',
+                status: ProductStatus.PUBLISHED,
             },
         });
-        prisma.apiProduct.findUnique.mockResolvedValue({ id: 'product-1' });
+        prisma.apiVersion.findFirst.mockResolvedValue({
+            id: 'ver-1',
+            status: VersionStatus.PUBLISHED,
+        });
         prisma.subscription.findFirst.mockResolvedValueOnce({
             id: 'active-sub',
+            status: SubscriptionStatus.ACTIVE,
         });
 
         const user = {
@@ -173,6 +189,57 @@ describe('SubscriptionsService', () => {
 
         await expect(service.subscribe('plan-1', user)).rejects.toMatchObject({
             code: ErrorCodes.ALREADY_SUBSCRIBED,
+        });
+    });
+
+    it('subscribe fails when product is not published', async () => {
+        prisma.plan.findUnique.mockResolvedValue({
+            id: 'plan-1',
+            productId: 'product-1',
+            name: 'Starter',
+            priceCents: 1000,
+            currency: 'EUR',
+            isActive: true,
+            product: {
+                title: 'Payments API',
+                status: ProductStatus.DRAFT,
+            },
+        });
+
+        await expect(
+            service.subscribe('plan-1', {
+                id: 'user-1',
+                email: 'user@example.com',
+                role: Role.BUYER,
+            }),
+        ).rejects.toMatchObject({
+            code: ErrorCodes.PRODUCT_NOT_PUBLIC,
+        });
+    });
+
+    it('subscribe fails when there is no published version', async () => {
+        prisma.plan.findUnique.mockResolvedValue({
+            id: 'plan-1',
+            productId: 'product-1',
+            name: 'Starter',
+            priceCents: 1000,
+            currency: 'EUR',
+            isActive: true,
+            product: {
+                title: 'Payments API',
+                status: ProductStatus.PUBLISHED,
+            },
+        });
+        prisma.apiVersion.findFirst.mockResolvedValue(null);
+
+        await expect(
+            service.subscribe('plan-1', {
+                id: 'user-1',
+                email: 'user@example.com',
+                role: Role.BUYER,
+            }),
+        ).rejects.toMatchObject({
+            code: ErrorCodes.PRODUCT_NOT_READY,
         });
     });
 

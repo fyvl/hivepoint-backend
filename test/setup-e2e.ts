@@ -5,6 +5,7 @@ const defaults: Record<string, string> = {
     JWT_REFRESH_TTL_SECONDS: '2592000',
     CORS_ORIGINS: 'http://localhost:5173',
     COOKIE_SECURE: 'false',
+    ALLOW_PRIVATE_NETWORK_TARGETS: 'true',
     MOCK_PAYMENT_SECRET: 'test-mock',
     API_KEY_SALT: 'test-salt',
     USAGE_INGEST_SECRET: 'test-usage',

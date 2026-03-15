@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { ProductStatus, Role, VersionStatus } from '@prisma/client';
-import type { Prisma } from '@prisma/client';
+import { Prisma, ProductStatus, Role, VersionStatus } from '@prisma/client';
+import { AppConfigService } from '../../common/config/config.service';
 import type { AuthenticatedUser } from '../../common/decorators/user.decorator';
 import { AppError } from '../../common/errors/app.error';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { assertSafeExternalHttpUrl } from '../../common/utils/external-url';
 import type { CreateVersionInput, UpdateVersionInput } from './catalog.schemas';
 import { VersionDto } from './dto/version.dto';
 import { VersionListResponseDto } from './dto/list-versions.dto';
@@ -24,7 +25,10 @@ const OPENAPI_MAX_SIZE_BYTES = 2_000_000;
 
 @Injectable()
 export class VersionsService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly configService: AppConfigService,
+    ) {}
 
     async listProductVersions(
         productId: string,
@@ -134,17 +138,32 @@ export class VersionsService {
             input.openApiUrl,
         );
 
-        return this.prisma.apiVersion.create({
-            data: {
-                productId,
-                version: input.version,
-                openApiUrl: input.openApiUrl,
-                openApiSnapshot,
-                openApiFetchedAt: new Date(),
-                status: VersionStatus.DRAFT,
-            },
-            select: versionSelect,
-        });
+        try {
+            return await this.prisma.apiVersion.create({
+                data: {
+                    productId,
+                    version: input.version,
+                    openApiUrl: input.openApiUrl,
+                    openApiSnapshot,
+                    openApiFetchedAt: new Date(),
+                    status: VersionStatus.DRAFT,
+                },
+                select: versionSelect,
+            });
+        } catch (error) {
+            if (
+                error instanceof Prisma.PrismaClientKnownRequestError &&
+                error.code === 'P2002'
+            ) {
+                throw new AppError({
+                    code: ErrorCodes.VERSION_ALREADY_EXISTS,
+                    message: 'VERSION_ALREADY_EXISTS',
+                    httpStatus: 409,
+                });
+            }
+
+            throw error;
+        }
     }
 
     async updateVersion(
@@ -321,6 +340,13 @@ export class VersionsService {
     }
 
     private async fetchOpenApiSnapshot(openApiUrl: string): Promise<string> {
+        await assertSafeExternalHttpUrl(openApiUrl, {
+            allowPrivateNetworkTargets:
+                this.configService.allowPrivateNetworkTargets,
+            message: 'OPENAPI_URL_NOT_ALLOWED',
+            httpStatus: 400,
+        });
+
         const abortController = new AbortController();
         const timeout = setTimeout(
             () => abortController.abort(),

@@ -164,6 +164,8 @@ describe('E2E flows', () => {
         publishProduct?: boolean;
         publishVersion?: boolean;
     }) => {
+        const shouldPublishProduct = options?.publishProduct ?? true;
+        const shouldPublishVersion = options?.publishVersion ?? true;
         const sellerEmail = uniqueEmail('seller');
         const seller = await registerUser(
             sellerEmail,
@@ -184,7 +186,7 @@ describe('E2E flows', () => {
             })
             .expect(201);
 
-        if (options?.publishProduct) {
+        if (shouldPublishProduct) {
             await request(app.getHttpServer())
                 .patch(`/catalog/products/${productResponse.body.id}`)
                 .set('Authorization', `Bearer ${sellerToken}`)
@@ -201,7 +203,7 @@ describe('E2E flows', () => {
               }
             | undefined;
 
-        if (options?.publishVersion) {
+        if (shouldPublishVersion) {
             const versionResponse = await request(app.getHttpServer())
                 .post(`/catalog/products/${productResponse.body.id}/versions`)
                 .set('Authorization', `Bearer ${sellerToken}`)

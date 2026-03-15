@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PlanPeriod, Role } from '@prisma/client';
+import { PlanPeriod, ProductStatus, Role, VersionStatus } from '@prisma/client';
 import type { AuthenticatedUser } from '../../common/decorators/user.decorator';
 import { AppError } from '../../common/errors/app.error';
 import { ErrorCodes } from '../../common/errors/error.codes';
@@ -24,10 +24,17 @@ const planSelect = {
 export class PlansService {
     constructor(private readonly prisma: PrismaService) {}
 
-    async listActivePlans(productId: string): Promise<PlanListResponseDto> {
+    async listActivePlans(
+        productId: string,
+        user?: AuthenticatedUser,
+    ): Promise<PlanListResponseDto> {
         const product = await this.prisma.apiProduct.findUnique({
             where: { id: productId },
-            select: { id: true },
+            select: {
+                id: true,
+                ownerId: true,
+                status: true,
+            },
         });
 
         if (!product) {
@@ -36,6 +43,30 @@ export class PlansService {
                 message: 'PRODUCT_NOT_FOUND',
                 httpStatus: 404,
             });
+        }
+
+        const isOwnerAdmin = this.isOwnerOrAdmin(product, user);
+
+        if (!isOwnerAdmin && product.status !== ProductStatus.PUBLISHED) {
+            throw new AppError({
+                code: ErrorCodes.PRODUCT_NOT_PUBLIC,
+                message: 'PRODUCT_NOT_PUBLIC',
+                httpStatus: 403,
+            });
+        }
+
+        if (!isOwnerAdmin) {
+            const publishedVersion = await this.prisma.apiVersion.findFirst({
+                where: {
+                    productId,
+                    status: VersionStatus.PUBLISHED,
+                },
+                select: { id: true },
+            });
+
+            if (!publishedVersion) {
+                return { items: [] };
+            }
         }
 
         const items = await this.prisma.plan.findMany({
@@ -97,5 +128,16 @@ export class PlansService {
             },
             select: planSelect,
         });
+    }
+
+    private isOwnerOrAdmin(
+        product: { ownerId: string },
+        user?: AuthenticatedUser,
+    ): boolean {
+        if (!user) {
+            return false;
+        }
+
+        return user.role === Role.ADMIN || product.ownerId === user.id;
     }
 }

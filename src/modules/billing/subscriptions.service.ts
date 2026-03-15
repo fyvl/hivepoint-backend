@@ -2,8 +2,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
     BillingProvider,
     InvoiceStatus,
+    Prisma,
+    ProductStatus,
     Role,
     SubscriptionStatus,
+    VersionStatus,
 } from '@prisma/client';
 import type { AuthenticatedUser } from '../../common/decorators/user.decorator';
 import { AppError } from '../../common/errors/app.error';
@@ -259,6 +262,7 @@ export class SubscriptionsService {
                 product: {
                     select: {
                         title: true,
+                        status: true,
                     },
                 },
             },
@@ -280,53 +284,26 @@ export class SubscriptionsService {
             });
         }
 
-        const product = await this.prisma.apiProduct.findUnique({
-            where: { id: plan.productId },
-            select: { id: true },
-        });
-
-        if (!product) {
+        if (plan.product.status !== ProductStatus.PUBLISHED) {
             throw new AppError({
-                code: ErrorCodes.PRODUCT_NOT_FOUND,
-                message: 'PRODUCT_NOT_FOUND',
-                httpStatus: 404,
+                code: ErrorCodes.PRODUCT_NOT_PUBLIC,
+                message: 'PRODUCT_NOT_PUBLIC',
+                httpStatus: 403,
             });
         }
 
-        const activeSubscription = await this.prisma.subscription.findFirst({
+        const publishedVersion = await this.prisma.apiVersion.findFirst({
             where: {
-                userId: user.id,
-                status: SubscriptionStatus.ACTIVE,
-                plan: {
-                    productId: plan.productId,
-                },
+                productId: plan.productId,
+                status: VersionStatus.PUBLISHED,
             },
             select: { id: true },
         });
 
-        if (activeSubscription) {
+        if (!publishedVersion) {
             throw new AppError({
-                code: ErrorCodes.ALREADY_SUBSCRIBED,
-                message: 'ALREADY_SUBSCRIBED',
-                httpStatus: 409,
-            });
-        }
-
-        const pendingSubscription = await this.prisma.subscription.findFirst({
-            where: {
-                userId: user.id,
-                status: SubscriptionStatus.PENDING,
-                plan: {
-                    productId: plan.productId,
-                },
-            },
-            select: { id: true },
-        });
-
-        if (pendingSubscription) {
-            throw new AppError({
-                code: ErrorCodes.SUBSCRIPTION_PENDING,
-                message: 'SUBSCRIPTION_PENDING',
+                code: ErrorCodes.PRODUCT_NOT_READY,
+                message: 'PRODUCT_NOT_READY',
                 httpStatus: 409,
             });
         }
@@ -335,6 +312,45 @@ export class SubscriptionsService {
 
         const { subscriptionId, invoiceId } = await this.prisma.$transaction(
             async (tx) => {
+                await tx.$executeRaw`
+                    SELECT pg_advisory_xact_lock(hashtext(${`subscribe:${user.id}:${plan.productId}`}))
+                `;
+
+                const existingSubscription = await tx.subscription.findFirst({
+                    where: {
+                        userId: user.id,
+                        status: {
+                            in: [
+                                SubscriptionStatus.ACTIVE,
+                                SubscriptionStatus.PENDING,
+                            ],
+                        },
+                        plan: {
+                            productId: plan.productId,
+                        },
+                    },
+                    select: {
+                        id: true,
+                        status: true,
+                    },
+                });
+
+                if (existingSubscription) {
+                    throw new AppError({
+                        code:
+                            existingSubscription.status ===
+                            SubscriptionStatus.ACTIVE
+                                ? ErrorCodes.ALREADY_SUBSCRIBED
+                                : ErrorCodes.SUBSCRIPTION_PENDING,
+                        message:
+                            existingSubscription.status ===
+                            SubscriptionStatus.ACTIVE
+                                ? 'ALREADY_SUBSCRIBED'
+                                : 'SUBSCRIPTION_PENDING',
+                        httpStatus: 409,
+                    });
+                }
+
                 const subscription = await tx.subscription.create({
                     data: {
                         userId: user.id,
@@ -369,6 +385,9 @@ export class SubscriptionsService {
                     subscriptionId: subscription.id,
                     invoiceId: invoice.id,
                 };
+            },
+            {
+                isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
             },
         );
 

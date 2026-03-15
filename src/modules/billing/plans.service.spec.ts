@@ -1,4 +1,4 @@
-import { PlanPeriod, Role } from '@prisma/client';
+import { PlanPeriod, ProductStatus, Role, VersionStatus } from '@prisma/client';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { PlansService } from './plans.service';
@@ -6,6 +6,9 @@ import { PlansService } from './plans.service';
 type PrismaMock = {
     apiProduct: {
         findUnique: jest.Mock;
+    };
+    apiVersion: {
+        findFirst: jest.Mock;
     };
     plan: {
         findMany: jest.Mock;
@@ -21,6 +24,9 @@ describe('PlansService', () => {
         prisma = {
             apiProduct: {
                 findUnique: jest.fn(),
+            },
+            apiVersion: {
+                findFirst: jest.fn(),
             },
             plan: {
                 findMany: jest.fn(),
@@ -104,7 +110,15 @@ describe('PlansService', () => {
     });
 
     it('get plans returns only active plans', async () => {
-        prisma.apiProduct.findUnique.mockResolvedValue({ id: 'product-1' });
+        prisma.apiProduct.findUnique.mockResolvedValue({
+            id: 'product-1',
+            ownerId: 'seller-1',
+            status: ProductStatus.PUBLISHED,
+        });
+        prisma.apiVersion.findFirst.mockResolvedValue({
+            id: 'version-1',
+            status: VersionStatus.PUBLISHED,
+        });
         prisma.plan.findMany.mockResolvedValue([]);
 
         await service.listActivePlans('product-1');
