@@ -528,8 +528,27 @@ export class SubscriptionsService {
         nextPaymentAttemptAt?: Date | null;
     }): Promise<{ ok: true; invoiceId: string }> {
         const invoiceId = await this.resolveInvoiceForExternalSync(params);
+        const currentInvoice = await this.prisma.invoice.findUnique({
+            where: { id: invoiceId },
+            select: {
+                status: true,
+                attemptCount: true,
+                nextPaymentAttemptAt: true,
+            },
+        });
+
+        if (!currentInvoice) {
+            throw new AppError({
+                code: ErrorCodes.INVOICE_NOT_FOUND,
+                message: 'INVOICE_NOT_FOUND',
+                httpStatus: 404,
+            });
+        }
 
         if (params.status === InvoiceStatus.DRAFT) {
+            const shouldPreserveCurrentStatus =
+                currentInvoice.status !== InvoiceStatus.DRAFT;
+
             await this.prisma.invoice.update({
                 where: { id: invoiceId },
                 data: {
@@ -540,9 +559,15 @@ export class SubscriptionsService {
                     externalInvoiceId: params.externalInvoiceId,
                     amountCents: params.amountCents,
                     currency: params.currency,
-                    status: InvoiceStatus.DRAFT,
-                    attemptCount: params.attemptCount ?? 0,
-                    nextPaymentAttemptAt: params.nextPaymentAttemptAt ?? null,
+                    status: shouldPreserveCurrentStatus
+                        ? currentInvoice.status
+                        : InvoiceStatus.DRAFT,
+                    attemptCount: shouldPreserveCurrentStatus
+                        ? currentInvoice.attemptCount
+                        : (params.attemptCount ?? 0),
+                    nextPaymentAttemptAt: shouldPreserveCurrentStatus
+                        ? currentInvoice.nextPaymentAttemptAt
+                        : (params.nextPaymentAttemptAt ?? null),
                     periodStart: params.periodStart,
                     periodEnd: params.periodEnd,
                 },

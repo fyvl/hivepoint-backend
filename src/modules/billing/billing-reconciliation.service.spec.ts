@@ -9,9 +9,15 @@ import { SubscriptionsService } from './subscriptions.service';
 describe('BillingReconciliationService', () => {
     let service: BillingReconciliationService;
     let prisma: {
+        backgroundJobLease: {
+            findUnique: jest.Mock;
+            create: jest.Mock;
+            updateMany: jest.Mock;
+        };
         subscription: {
             findMany: jest.Mock;
         };
+        $transaction: jest.Mock;
     };
     let configService: Pick<
         AppConfigService,
@@ -38,9 +44,19 @@ describe('BillingReconciliationService', () => {
 
     beforeEach(() => {
         prisma = {
+            backgroundJobLease: {
+                findUnique: jest.fn().mockResolvedValue(null),
+                create: jest.fn().mockResolvedValue({}),
+                updateMany: jest.fn(),
+            },
             subscription: {
                 findMany: jest.fn(),
             },
+            $transaction: jest.fn(async (callback) =>
+                callback({
+                    ...prisma,
+                }),
+            ),
         };
         configService = {
             paymentProvider: 'STRIPE',
@@ -167,6 +183,50 @@ describe('BillingReconciliationService', () => {
         ).toHaveBeenCalledWith('sub_missing');
         expect(result).toEqual({
             processed: 1,
+            failed: 0,
+        });
+    });
+
+    it('skips reconciliation when another instance owns the lease', async () => {
+        prisma.backgroundJobLease.findUnique.mockResolvedValue({
+            ownerId: 'other-instance',
+            expiresAt: new Date('2099-01-01T00:00:00.000Z'),
+        });
+
+        const result = await service.reconcileStripeState();
+
+        expect(prisma.subscription.findMany).not.toHaveBeenCalled();
+        expect(stripeClientService.client.subscriptions.retrieve).not.toHaveBeenCalled();
+        expect(result).toEqual({
+            processed: 0,
+            failed: 0,
+        });
+    });
+
+    it('reclaims an expired reconciliation lease', async () => {
+        const expiredAt = new Date('2000-01-01T00:00:00.000Z');
+        prisma.backgroundJobLease.findUnique.mockResolvedValue({
+            ownerId: 'old-instance',
+            expiresAt: expiredAt,
+        });
+        prisma.backgroundJobLease.updateMany.mockResolvedValue({
+            count: 1,
+        });
+        prisma.subscription.findMany.mockResolvedValue([]);
+
+        const result = await service.reconcileStripeState();
+
+        expect(prisma.backgroundJobLease.updateMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: {
+                    name: 'billing:stripe-reconciliation',
+                    ownerId: 'old-instance',
+                    expiresAt: expiredAt,
+                },
+            }),
+        );
+        expect(result).toEqual({
+            processed: 0,
             failed: 0,
         });
     });

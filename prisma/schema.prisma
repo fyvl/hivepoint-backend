@@ -165,6 +165,16 @@ model Invoice {
     @@index([subscriptionId])
 }
 
+model BackgroundJobLease {
+    name      String   @id
+    ownerId   String
+    expiresAt DateTime
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([expiresAt])
+}
+
 model ApiKey {
     id        String   @id @default(uuid())
     userId    String

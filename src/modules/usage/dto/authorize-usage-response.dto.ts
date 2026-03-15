@@ -20,7 +20,7 @@ export class UsageAuthorizationPlanDto {
     @ApiProperty({ example: 1000 })
     quotaRequests!: number;
 
-    @ApiProperty({ example: 120, nullable: true })
+    @ApiProperty({ type: Number, example: 120, nullable: true })
     rateLimitRpm!: number | null;
 }
 
@@ -66,10 +66,10 @@ export class AuthorizeUsageResponseDto {
     @ApiPropertyOptional({ example: 879 })
     remainingRequests?: number;
 
-    @ApiPropertyOptional({ example: 120, nullable: true })
+    @ApiPropertyOptional({ type: Number, example: 120, nullable: true })
     rateLimitRpm?: number | null;
 
-    @ApiPropertyOptional({ example: 52, nullable: true })
+    @ApiPropertyOptional({ type: Number, example: 52, nullable: true })
     remainingRateLimitRequests?: number | null;
 
     @ApiPropertyOptional({ example: false })

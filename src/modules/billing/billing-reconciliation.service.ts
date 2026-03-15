@@ -7,8 +7,10 @@ import {
 import {
     BillingProvider,
     InvoiceStatus,
+    Prisma,
     SubscriptionStatus,
 } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import Stripe from 'stripe';
 import { AppConfigService } from '../../common/config/config.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -20,7 +22,9 @@ import { SubscriptionsService } from './subscriptions.service';
 export class BillingReconciliationService
     implements OnModuleInit, OnModuleDestroy
 {
+    private static readonly LEASE_NAME = 'billing:stripe-reconciliation';
     private readonly logger = new Logger(BillingReconciliationService.name);
+    private readonly leaseOwnerId = randomUUID();
     private intervalHandle: NodeJS.Timeout | null = null;
     private isRunning = false;
 
@@ -56,6 +60,14 @@ export class BillingReconciliationService
         failed: number;
     }> {
         if (!this.shouldRun()) {
+            return {
+                processed: 0,
+                failed: 0,
+            };
+        }
+
+        const leaseAcquired = await this.tryAcquireLease();
+        if (!leaseAcquired) {
             return {
                 processed: 0,
                 failed: 0,
@@ -112,6 +124,75 @@ export class BillingReconciliationService
             processed,
             failed,
         };
+    }
+
+    private async tryAcquireLease(): Promise<boolean> {
+        const now = new Date();
+        const expiresAt = new Date(
+            now.getTime() + this.getLeaseDurationMilliseconds(),
+        );
+
+        return this.prisma.$transaction(
+            async (tx) => {
+                const lease = await tx.backgroundJobLease.findUnique({
+                    where: {
+                        name: BillingReconciliationService.LEASE_NAME,
+                    },
+                    select: {
+                        ownerId: true,
+                        expiresAt: true,
+                    },
+                });
+
+                if (!lease) {
+                    try {
+                        await tx.backgroundJobLease.create({
+                            data: {
+                                name: BillingReconciliationService.LEASE_NAME,
+                                ownerId: this.leaseOwnerId,
+                                expiresAt,
+                            },
+                        });
+
+                        return true;
+                    } catch (error) {
+                        if (
+                            error instanceof
+                                Prisma.PrismaClientKnownRequestError &&
+                            error.code === 'P2002'
+                        ) {
+                            return false;
+                        }
+
+                        throw error;
+                    }
+                }
+
+                if (
+                    lease.ownerId !== this.leaseOwnerId &&
+                    lease.expiresAt > now
+                ) {
+                    return false;
+                }
+
+                const updated = await tx.backgroundJobLease.updateMany({
+                    where: {
+                        name: BillingReconciliationService.LEASE_NAME,
+                        ownerId: lease.ownerId,
+                        expiresAt: lease.expiresAt,
+                    },
+                    data: {
+                        ownerId: this.leaseOwnerId,
+                        expiresAt,
+                    },
+                });
+
+                return updated.count === 1;
+            },
+            {
+                isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+            },
+        );
     }
 
     private async runScheduledCycle(): Promise<void> {
@@ -272,6 +353,15 @@ export class BillingReconciliationService
         return (
             this.configService.paymentProvider === 'STRIPE' &&
             this.configService.billingReconciliationEnabled
+        );
+    }
+
+    private getLeaseDurationMilliseconds(): number {
+        return (
+            Math.max(
+                this.configService.billingReconciliationIntervalSeconds * 2,
+                60,
+            ) * 1000
         );
     }
 

@@ -466,6 +466,11 @@ describe('SubscriptionsService', () => {
         prisma.invoice.findUnique
             .mockResolvedValueOnce(null)
             .mockResolvedValueOnce({
+                status: InvoiceStatus.DRAFT,
+                attemptCount: 0,
+                nextPaymentAttemptAt: null,
+            })
+            .mockResolvedValueOnce({
                 id: 'inv-renew-1',
                 status: InvoiceStatus.DRAFT,
                 externalCheckoutSessionId: null,
@@ -549,6 +554,11 @@ describe('SubscriptionsService', () => {
         prisma.invoice.findUnique
             .mockResolvedValueOnce(null)
             .mockResolvedValueOnce({
+                status: InvoiceStatus.DRAFT,
+                attemptCount: 0,
+                nextPaymentAttemptAt: null,
+            })
+            .mockResolvedValueOnce({
                 id: 'inv-renew-1',
                 status: InvoiceStatus.DRAFT,
                 externalCheckoutSessionId: null,
@@ -603,6 +613,56 @@ describe('SubscriptionsService', () => {
                 gracePeriodEndsAt,
             },
         });
+        expect(result).toEqual({
+            ok: true,
+            invoiceId: 'inv-renew-1',
+        });
+    });
+
+    it('preserves a past due invoice when a stale draft sync arrives later', async () => {
+        const periodStart = new Date('2099-04-12T19:49:57.000Z');
+        const periodEnd = new Date('2099-05-12T19:49:57.000Z');
+        const nextPaymentAttemptAt = new Date('2099-05-13T10:00:00.000Z');
+
+        prisma.invoice.findUnique
+            .mockResolvedValueOnce({
+                id: 'inv-renew-1',
+            })
+            .mockResolvedValueOnce({
+                status: InvoiceStatus.PAST_DUE,
+                attemptCount: 2,
+                nextPaymentAttemptAt,
+            });
+
+        const result = await service.syncInvoiceFromExternal({
+            paymentProvider: 'STRIPE',
+            externalInvoiceId: 'in_renew_1',
+            externalSubscriptionId: 'sub_ext_1',
+            amountCents: 4900,
+            currency: 'USD',
+            periodStart,
+            periodEnd,
+            status: InvoiceStatus.DRAFT,
+            attemptCount: 0,
+            nextPaymentAttemptAt: null,
+        });
+
+        expect(prisma.invoice.update).toHaveBeenCalledWith({
+            where: { id: 'inv-renew-1' },
+            data: {
+                paymentProvider: BillingProvider.STRIPE,
+                externalCheckoutSessionId: undefined,
+                externalInvoiceId: 'in_renew_1',
+                amountCents: 4900,
+                currency: 'USD',
+                status: InvoiceStatus.PAST_DUE,
+                attemptCount: 2,
+                nextPaymentAttemptAt,
+                periodStart,
+                periodEnd,
+            },
+        });
+        expect(prisma.subscription.update).not.toHaveBeenCalled();
         expect(result).toEqual({
             ok: true,
             invoiceId: 'inv-renew-1',

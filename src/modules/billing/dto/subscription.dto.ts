@@ -21,7 +21,7 @@ export class SubscriptionPlanDto {
     @ApiProperty({ example: 10000 })
     quotaRequests!: number;
 
-    @ApiProperty({ example: 120, nullable: true })
+    @ApiProperty({ type: Number, example: 120, nullable: true })
     rateLimitRpm!: number | null;
 
     @ApiProperty({ example: 'uuid' })

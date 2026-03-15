@@ -11,7 +11,7 @@ export class UsageSummaryPlanDto {
     @ApiProperty({ example: 1000 })
     quotaRequests!: number;
 
-    @ApiProperty({ example: 120, nullable: true })
+    @ApiProperty({ type: Number, example: 120, nullable: true })
     rateLimitRpm!: number | null;
 }
 
