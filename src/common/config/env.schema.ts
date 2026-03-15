@@ -64,6 +64,18 @@ export const envSchema = z
             emptyToUndefined,
             z.string().url().optional(),
         ),
+        BILLING_GRACE_PERIOD_DAYS: z.coerce.number().int().min(0).default(3),
+        BILLING_RECONCILIATION_ENABLED: booleanFromString.default(true),
+        BILLING_RECONCILIATION_INTERVAL_SECONDS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(300),
+        BILLING_RECONCILIATION_BATCH_SIZE: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(25),
         API_KEY_SALT: z.string().min(1),
         USAGE_INGEST_SECRET: z.string().min(1),
     })

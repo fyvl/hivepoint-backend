@@ -77,4 +77,26 @@ export class AppConfigService {
     get stripePortalReturnUrl(): string | undefined {
         return this.configService.get('STRIPE_PORTAL_RETURN_URL');
     }
+
+    get billingGracePeriodDays(): number {
+        return this.configService.getOrThrow('BILLING_GRACE_PERIOD_DAYS');
+    }
+
+    get billingReconciliationEnabled(): boolean {
+        return this.configService.getOrThrow(
+            'BILLING_RECONCILIATION_ENABLED',
+        );
+    }
+
+    get billingReconciliationIntervalSeconds(): number {
+        return this.configService.getOrThrow(
+            'BILLING_RECONCILIATION_INTERVAL_SECONDS',
+        );
+    }
+
+    get billingReconciliationBatchSize(): number {
+        return this.configService.getOrThrow(
+            'BILLING_RECONCILIATION_BATCH_SIZE',
+        );
+    }
 }

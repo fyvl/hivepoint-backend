@@ -14,7 +14,7 @@ HivePoint is a NestJS backend for a marketplace of API products. It supports use
 
 **Out of scope**
 - Rate limiting and fuller streaming proxy support.
-- Full automated renewal lifecycle with retries, dunning, and reconciliation jobs.
+- Custom renewal retry policies beyond the payment provider's built-in dunning behavior.
 - Async usage ingestion pipeline.
 - Audit logging and observability stack.
 
@@ -90,6 +90,6 @@ How to run:
 ## Roadmap
 - Rate limiting and fuller streaming proxy support.
 - Async usage pipeline (ingest -> queue -> aggregation).
-- Full subscription renewal lifecycle and reconciliation.
+- Custom billing automation policies and notification workflows.
 - Audit logs and observability (metrics, traces, structured logs).
 

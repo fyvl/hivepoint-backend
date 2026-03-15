@@ -1,0 +1,5 @@
+ALTER TYPE "InvoiceStatus" ADD VALUE 'PAST_DUE';
+
+ALTER TABLE "Invoice"
+ADD COLUMN "attemptCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN "nextPaymentAttemptAt" TIMESTAMP(3);

@@ -12,6 +12,7 @@ import { StripePaymentProvider } from './payment/stripe-payment.provider';
 import { PlansController } from './plans.controller';
 import { PlansService } from './plans.service';
 import { MockPaymentsController } from './mock-payments.controller';
+import { BillingReconciliationService } from './billing-reconciliation.service';
 import { StripeWebhooksController } from './stripe-webhooks.controller';
 import { StripeWebhooksService } from './stripe-webhooks.service';
 import { SubscriptionsController } from './subscriptions.controller';
@@ -35,6 +36,7 @@ import { SubscriptionsService } from './subscriptions.service';
         MockPaymentProvider,
         StripeClientService,
         StripePaymentProvider,
+        BillingReconciliationService,
         StripeWebhooksService,
         {
             provide: PAYMENT_PROVIDER,

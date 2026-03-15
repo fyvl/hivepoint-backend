@@ -12,6 +12,7 @@ export const createPlanSchema = z.object({
     currency: z.string().trim().min(1).max(10).optional(),
     period: z.nativeEnum(PlanPeriod).optional(),
     quotaRequests: z.number().int().min(1),
+    rateLimitRpm: z.number().int().min(1).optional(),
     isActive: z.boolean().optional(),
 });
 

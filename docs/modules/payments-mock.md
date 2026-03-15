@@ -19,7 +19,7 @@ The billing module can now switch `/billing/subscribe` between mock and Stripe c
 | --- | --- | --- | --- | --- | --- |
 | POST | `/billing/subscribe` | Bearer | `SubscribeDto` | `SubscribeResponseDto` | Creates subscription + invoice and returns `paymentLink`. |
 | POST | `/billing/mock/succeed` | `x-mock-payment-secret` header | Query: `invoiceId` | `MockPaymentResponseDto` | Sets invoice `PAID`, subscription `ACTIVE` with invoice period; idempotent if already `PAID`. |
-| POST | `/billing/mock/fail` | `x-mock-payment-secret` header | Query: `invoiceId` | `MockPaymentResponseDto` | Sets invoice `VOID`; subscription becomes `PAST_DUE` if not already `ACTIVE`; idempotent if already `VOID`. |
+| POST | `/billing/mock/fail` | `x-mock-payment-secret` header | Query: `invoiceId` | `MockPaymentResponseDto` | Sets invoice `VOID`; subscription becomes `PAST_DUE` and may retain access through the configured grace period; idempotent if already `VOID`. |
 | POST | `/billing/stripe/webhook` | Stripe signature header | Raw Stripe event body | `{ received: true }` | Consumes Stripe Checkout, invoice, and subscription lifecycle events. |
 
 ## Mock endpoint protection
@@ -29,7 +29,7 @@ The billing module can now switch `/billing/subscribe` between mock and Stripe c
 ## Status transitions
 - Invoice: `DRAFT -> PAID` on succeed, `DRAFT -> VOID` on fail.
 - Subscription on succeed: `PENDING -> ACTIVE` and period fields set from the invoice.
-- Subscription on fail: if not `ACTIVE`, status becomes `PAST_DUE`; otherwise stays `ACTIVE`.
+- Subscription on fail: status becomes `PAST_DUE`; if the subscription already has a billing period, access can remain available through `BILLING_GRACE_PERIOD_DAYS`.
 
 ## Error codes
 - `UNAUTHORIZED` (missing/invalid bearer token for `/billing/subscribe`)
@@ -43,4 +43,4 @@ The billing module can now switch `/billing/subscribe` between mock and Stripe c
 
 ## Not implemented
 - The `paymentLink` points to `/billing/mock/pay`, but there is no handler for this route in code.
-- Full renewal lifecycle is not implemented yet; current Stripe integration covers checkout, local invoice sync for recurring Stripe invoices, portal access, and cancel-at-period-end sync.
+- Mock endpoints do not simulate Stripe-style automatic retries or reconciliation. Stripe billing now covers checkout, recurring invoice sync, `PAST_DUE` retry metadata, customer portal recovery, cancel-at-period-end sync, grace periods, and background reconciliation.

@@ -41,6 +41,7 @@ enum SubscriptionStatus {
 enum InvoiceStatus {
     DRAFT
     PAID
+    PAST_DUE
     VOID
 }
 
@@ -107,16 +108,17 @@ model ApiVersion {
 }
 
 model Plan {
-    id           String     @id @default(uuid())
-    productId    String
-    name         String
-    priceCents   Int
-    currency     String     @default("EUR")
-    period       PlanPeriod @default(MONTH)
+    id            String         @id @default(uuid())
+    productId     String
+    name          String
+    priceCents    Int
+    currency      String         @default("EUR")
+    period        PlanPeriod     @default(MONTH)
     quotaRequests Int
-    isActive     Boolean    @default(true)
-    createdAt    DateTime   @default(now())
-    product      ApiProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+    rateLimitRpm  Int?
+    isActive      Boolean        @default(true)
+    createdAt     DateTime       @default(now())
+    product       ApiProduct     @relation(fields: [productId], references: [id], onDelete: Cascade)
     subscriptions Subscription[]
 
     @@index([productId])
@@ -131,6 +133,7 @@ model Subscription {
     status                 SubscriptionStatus @default(PENDING)
     currentPeriodStart     DateTime?
     currentPeriodEnd       DateTime?
+    gracePeriodEndsAt      DateTime?
     cancelAtPeriodEnd      Boolean            @default(false)
     createdAt              DateTime           @default(now())
     updatedAt              DateTime           @updatedAt
@@ -152,6 +155,8 @@ model Invoice {
     amountCents               Int
     currency                  String          @default("EUR")
     status                    InvoiceStatus   @default(DRAFT)
+    attemptCount              Int             @default(0)
+    nextPaymentAttemptAt      DateTime?
     periodStart               DateTime
     periodEnd                 DateTime
     createdAt                 DateTime        @default(now())

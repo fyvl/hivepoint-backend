@@ -50,6 +50,7 @@ describe('PlansService', () => {
             currency: 'EUR',
             period: PlanPeriod.MONTH,
             quotaRequests: 10000,
+            rateLimitRpm: 120,
             isActive: true,
             createdAt: new Date(),
         });
@@ -66,6 +67,7 @@ describe('PlansService', () => {
                 name: 'Starter',
                 priceCents: 1000,
                 quotaRequests: 10000,
+                rateLimitRpm: 120,
             },
             user,
         );
@@ -76,6 +78,7 @@ describe('PlansService', () => {
                     productId: 'product-1',
                     isActive: true,
                     period: PlanPeriod.MONTH,
+                    rateLimitRpm: 120,
                 }),
             }),
         );

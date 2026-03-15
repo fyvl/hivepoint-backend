@@ -77,6 +77,8 @@ describe('GatewayService', () => {
             allowed: true,
             subscriptionId: 'sub-1',
             remainingRequests: 10,
+            rateLimitRpm: 120,
+            remainingRateLimitRequests: 119,
             periodEnd: new Date('2026-04-01T00:00:00.000Z'),
             usageRecorded: true,
         });
@@ -133,6 +135,8 @@ describe('GatewayService', () => {
                 subscriptionId: 'sub-1',
                 requestCount: 1,
                 remainingRequests: 10,
+                rateLimitRpm: 120,
+                remainingRateLimitRequests: 119,
                 usageRecorded: true,
                 periodEnd: new Date('2026-04-01T00:00:00.000Z'),
             },
@@ -159,6 +163,8 @@ describe('GatewayService', () => {
             allowed: true,
             subscriptionId: 'sub-1',
             remainingRequests: 10,
+            rateLimitRpm: null,
+            remainingRateLimitRequests: null,
             periodEnd: new Date('2026-04-01T00:00:00.000Z'),
             usageRecorded: true,
         });
@@ -240,6 +246,46 @@ describe('GatewayService', () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
+    it('rejects dispatch when gateway rate limit is exceeded', async () => {
+        prisma.apiProduct.findUnique.mockResolvedValue({
+            id: 'prod-1',
+            title: 'Demo API',
+            status: ProductStatus.PUBLISHED,
+        });
+        prisma.apiVersion.findFirst.mockResolvedValue({
+            id: 'ver-1',
+            version: 'v1',
+            openApiUrl: 'https://seller.example.com/openapi.json',
+            openApiSnapshot: JSON.stringify({
+                openapi: '3.0.0',
+                servers: [{ url: 'https://seller.example.com/v1' }],
+            }),
+            status: VersionStatus.PUBLISHED,
+        });
+        usageService.authorizeGatewayUsage.mockResolvedValue({
+            allowed: false,
+            reason: 'RATE_LIMIT_EXCEEDED',
+        });
+
+        await expect(
+            service.dispatch(
+                {
+                    productId: 'prod-1',
+                    path: '/health',
+                    method: 'GET',
+                    headers: {},
+                    query: {},
+                    requestCount: 1,
+                },
+                'hp_valid',
+            ),
+        ).rejects.toMatchObject({
+            code: ErrorCodes.RATE_LIMIT_EXCEEDED,
+        });
+
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it('rejects unsafe upstream targets from the schema server list', async () => {
         allowPrivateNetworkTargets = false;
         prisma.apiProduct.findUnique.mockResolvedValue({
@@ -261,6 +307,8 @@ describe('GatewayService', () => {
             allowed: true,
             subscriptionId: 'sub-1',
             remainingRequests: 10,
+            rateLimitRpm: null,
+            remainingRateLimitRequests: null,
             periodEnd: new Date('2026-04-01T00:00:00.000Z'),
             usageRecorded: true,
         });

@@ -6,6 +6,7 @@ import {
     SubscriptionStatus,
     VersionStatus,
 } from '@prisma/client';
+import { AppConfigService } from '../../common/config/config.service';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { MockPaymentProvider } from './payment/mock-payment.provider';
@@ -41,6 +42,7 @@ describe('SubscriptionsService', () => {
     let activePaymentProvider: jest.Mocked<PaymentProvider>;
     let mockPaymentProvider: jest.Mocked<PaymentProvider>;
     let stripePaymentProvider: jest.Mocked<PaymentProvider>;
+    let configService: Pick<AppConfigService, 'billingGracePeriodDays'>;
     let txExecuteRaw: jest.Mock;
 
     beforeEach(() => {
@@ -90,9 +92,13 @@ describe('SubscriptionsService', () => {
             createPayment: jest.fn(),
             scheduleSubscriptionCancelAtPeriodEnd: jest.fn(),
         };
+        configService = {
+            billingGracePeriodDays: 3,
+        };
 
         service = new SubscriptionsService(
             prisma as unknown as PrismaService,
+            configService as AppConfigService,
             activePaymentProvider,
             mockPaymentProvider as unknown as MockPaymentProvider,
             stripePaymentProvider as unknown as StripePaymentProvider,
@@ -282,6 +288,7 @@ describe('SubscriptionsService', () => {
             subscription: {
                 id: 'sub-1',
                 status: SubscriptionStatus.ACTIVE,
+                gracePeriodEndsAt: null,
                 cancelAtPeriodEnd: false,
                 paymentProvider: BillingProvider.STRIPE,
                 plan: {
@@ -315,6 +322,7 @@ describe('SubscriptionsService', () => {
             invoiceStatus: InvoiceStatus.PAID,
             subscriptionId: 'sub-1',
             subscriptionStatus: SubscriptionStatus.ACTIVE,
+            gracePeriodEndsAt: null,
             cancelAtPeriodEnd: false,
             paymentProvider: BillingProvider.STRIPE,
             productTitle: 'Payments API',
@@ -348,6 +356,8 @@ describe('SubscriptionsService', () => {
                 paymentProvider: BillingProvider.MOCK,
                 externalCheckoutSessionId: null,
                 externalInvoiceId: null,
+                attemptCount: 0,
+                nextPaymentAttemptAt: null,
             },
         });
         expect(prisma.subscription.update).toHaveBeenCalledWith({
@@ -358,12 +368,17 @@ describe('SubscriptionsService', () => {
                 externalSubscriptionId: null,
                 currentPeriodStart: periodStart,
                 currentPeriodEnd: periodEnd,
+                gracePeriodEndsAt: null,
             },
         });
         expect(result.ok).toBe(true);
     });
 
     it('mock fail voids invoice and marks subscription past due', async () => {
+        const currentPeriodStart = new Date('2099-01-01T00:00:00.000Z');
+        const currentPeriodEnd = new Date('2099-02-01T00:00:00.000Z');
+        const gracePeriodEndsAt = new Date('2099-02-04T00:00:00.000Z');
+
         prisma.invoice.findUnique.mockResolvedValue({
             id: 'inv-1',
             status: InvoiceStatus.DRAFT,
@@ -372,6 +387,9 @@ describe('SubscriptionsService', () => {
             subscription: {
                 id: 'sub-1',
                 status: SubscriptionStatus.PENDING,
+                currentPeriodStart,
+                currentPeriodEnd,
+                gracePeriodEndsAt: null,
                 externalSubscriptionId: null,
             },
         });
@@ -385,6 +403,8 @@ describe('SubscriptionsService', () => {
                 paymentProvider: BillingProvider.MOCK,
                 externalCheckoutSessionId: null,
                 externalInvoiceId: null,
+                attemptCount: 0,
+                nextPaymentAttemptAt: null,
             },
         });
         expect(prisma.subscription.update).toHaveBeenCalledWith({
@@ -393,6 +413,7 @@ describe('SubscriptionsService', () => {
                 paymentProvider: BillingProvider.MOCK,
                 externalSubscriptionId: null,
                 status: SubscriptionStatus.PAST_DUE,
+                gracePeriodEndsAt,
             },
         });
         expect(result.ok).toBe(true);
@@ -449,6 +470,7 @@ describe('SubscriptionsService', () => {
                 status: InvoiceStatus.DRAFT,
                 externalCheckoutSessionId: null,
                 externalInvoiceId: 'in_renew_1',
+                attemptCount: 0,
                 periodStart,
                 periodEnd,
                 subscription: {
@@ -497,6 +519,8 @@ describe('SubscriptionsService', () => {
                 paymentProvider: BillingProvider.STRIPE,
                 externalCheckoutSessionId: null,
                 externalInvoiceId: 'in_renew_1',
+                attemptCount: 0,
+                nextPaymentAttemptAt: null,
             },
         });
         expect(prisma.subscription.update).toHaveBeenCalledWith({
@@ -507,6 +531,76 @@ describe('SubscriptionsService', () => {
                 externalSubscriptionId: 'sub_ext_1',
                 currentPeriodStart: periodStart,
                 currentPeriodEnd: periodEnd,
+                gracePeriodEndsAt: null,
+            },
+        });
+        expect(result).toEqual({
+            ok: true,
+            invoiceId: 'inv-renew-1',
+        });
+    });
+
+    it('syncs recurring external invoice as past due with retry metadata', async () => {
+        const periodStart = new Date('2099-04-12T19:49:57.000Z');
+        const periodEnd = new Date('2099-05-12T19:49:57.000Z');
+        const nextPaymentAttemptAt = new Date('2099-05-13T10:00:00.000Z');
+        const gracePeriodEndsAt = new Date('2099-05-15T19:49:57.000Z');
+
+        prisma.invoice.findUnique
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce({
+                id: 'inv-renew-1',
+                status: InvoiceStatus.DRAFT,
+                externalCheckoutSessionId: null,
+                externalInvoiceId: 'in_renew_1',
+                attemptCount: 0,
+                subscription: {
+                    id: 'sub-1',
+                    status: SubscriptionStatus.ACTIVE,
+                    currentPeriodStart: periodStart,
+                    currentPeriodEnd: periodEnd,
+                    gracePeriodEndsAt: null,
+                    externalSubscriptionId: 'sub_ext_1',
+                },
+            });
+        prisma.subscription.findUnique.mockResolvedValueOnce({
+            id: 'sub-1',
+        });
+        prisma.invoice.create.mockResolvedValue({
+            id: 'inv-renew-1',
+        });
+
+        const result = await service.syncInvoiceFromExternal({
+            paymentProvider: 'STRIPE',
+            externalInvoiceId: 'in_renew_1',
+            externalSubscriptionId: 'sub_ext_1',
+            amountCents: 4900,
+            currency: 'USD',
+            periodStart,
+            periodEnd,
+            status: InvoiceStatus.PAST_DUE,
+            attemptCount: 2,
+            nextPaymentAttemptAt,
+        });
+
+        expect(prisma.invoice.update).toHaveBeenCalledWith({
+            where: { id: 'inv-renew-1' },
+            data: {
+                status: InvoiceStatus.PAST_DUE,
+                paymentProvider: BillingProvider.STRIPE,
+                externalCheckoutSessionId: null,
+                externalInvoiceId: 'in_renew_1',
+                attemptCount: 2,
+                nextPaymentAttemptAt,
+            },
+        });
+        expect(prisma.subscription.update).toHaveBeenCalledWith({
+            where: { id: 'sub-1' },
+            data: {
+                status: SubscriptionStatus.PAST_DUE,
+                paymentProvider: BillingProvider.STRIPE,
+                externalSubscriptionId: 'sub_ext_1',
+                gracePeriodEndsAt,
             },
         });
         expect(result).toEqual({

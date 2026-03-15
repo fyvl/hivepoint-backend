@@ -16,6 +16,7 @@ const planSelect = {
     currency: true,
     period: true,
     quotaRequests: true,
+    rateLimitRpm: true,
     isActive: true,
     createdAt: true,
 } as const;
@@ -124,6 +125,7 @@ export class PlansService {
                 currency: input.currency ?? 'EUR',
                 period: input.period ?? PlanPeriod.MONTH,
                 quotaRequests: input.quotaRequests,
+                rateLimitRpm: input.rateLimitRpm ?? null,
                 isActive: input.isActive ?? true,
             },
             select: planSelect,

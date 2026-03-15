@@ -67,7 +67,9 @@ export class GatewayController {
     @ApiNotFoundResponse({
         description: 'PRODUCT_NOT_FOUND or VERSION_NOT_FOUND',
     })
-    @ApiTooManyRequestsResponse({ description: 'QUOTA_EXCEEDED' })
+    @ApiTooManyRequestsResponse({
+        description: 'QUOTA_EXCEEDED or RATE_LIMIT_EXCEEDED',
+    })
     @ApiBadGatewayResponse({
         description:
             'GATEWAY_TARGET_NOT_CONFIGURED or GATEWAY_UPSTREAM_UNAVAILABLE',
@@ -103,7 +105,9 @@ export class GatewayController {
     @ApiNotFoundResponse({
         description: 'PRODUCT_NOT_FOUND or VERSION_NOT_FOUND',
     })
-    @ApiTooManyRequestsResponse({ description: 'QUOTA_EXCEEDED' })
+    @ApiTooManyRequestsResponse({
+        description: 'QUOTA_EXCEEDED or RATE_LIMIT_EXCEEDED',
+    })
     @ApiBadGatewayResponse({
         description:
             'GATEWAY_TARGET_NOT_CONFIGURED or GATEWAY_UPSTREAM_UNAVAILABLE',
@@ -146,6 +150,20 @@ export class GatewayController {
             response.setHeader(
                 'x-hivepoint-remaining-requests',
                 String(result.usage.remainingRequests),
+            );
+        }
+        if (typeof result.usage.rateLimitRpm === 'number') {
+            response.setHeader(
+                'x-hivepoint-rate-limit-rpm',
+                String(result.usage.rateLimitRpm),
+            );
+        }
+        if (
+            typeof result.usage.remainingRateLimitRequests === 'number'
+        ) {
+            response.setHeader(
+                'x-hivepoint-rate-limit-remaining',
+                String(result.usage.remainingRateLimitRequests),
             );
         }
         if (result.usage.periodEnd) {

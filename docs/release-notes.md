@@ -11,8 +11,8 @@
 - OpenAPI/Swagger: `/api` and `/openapi.json`.
 
 ## Known limitations
-- No rate limiting yet on gateway traffic.
-- Full renewal lifecycle is not complete yet: Stripe webhook sync creates local recurring invoices, but retry/dunning flows and deeper reconciliation are still limited.
+- Gateway rate limiting is limited to an optional per-plan RPM policy; there is no richer burst/dynamic policy layer yet.
+- Stripe retry cadence and dunning rules are provider-driven; the app surfaces retry state and reconciliation results but does not define custom retry policies.
 - Usage aggregation is synchronous, not event-driven.
 - Role changes are done via database updates (no admin UI).
 - Gateway proxy currently supports JSON/text request and response bodies; it is not a full streaming/binary reverse proxy yet.

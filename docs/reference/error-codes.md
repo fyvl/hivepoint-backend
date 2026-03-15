@@ -39,6 +39,7 @@ All API errors are returned in a unified format:
 | `INVALID_API_KEY` | 401 | Gateway dispatch when `x-api-key` is invalid. |
 | `NO_ACTIVE_SUBSCRIPTION` | 403 | Gateway dispatch when the API key owner has no active subscription for the product. |
 | `QUOTA_EXCEEDED` | 429 | Gateway dispatch when the request would exceed the plan quota. |
+| `RATE_LIMIT_EXCEEDED` | 429 | Gateway dispatch when the request would exceed the plan RPM limit. |
 | `USAGE_INGEST_FORBIDDEN` | 403 | Usage internal endpoints when `x-usage-secret` is missing or invalid. |
 | `PAYMENT_PROVIDER_NOT_ENABLED` | 400 | Billing Stripe provider endpoints when Stripe is not active. |
 | `STRIPE_WEBHOOK_INVALID` | 400 | Stripe webhook signature validation. |

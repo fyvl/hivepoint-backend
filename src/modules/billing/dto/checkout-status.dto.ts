@@ -21,6 +21,9 @@ export class CheckoutStatusDto {
     @ApiProperty({ enum: SubscriptionStatus })
     subscriptionStatus!: SubscriptionStatus;
 
+    @ApiProperty({ type: String, format: 'date-time', nullable: true })
+    gracePeriodEndsAt!: Date | null;
+
     @ApiProperty({ example: false })
     cancelAtPeriodEnd!: boolean;
 

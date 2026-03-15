@@ -121,7 +121,7 @@ export class StripeWebhooksService {
     }
 
     private async handleInvoiceFailed(invoice: Stripe.Invoice): Promise<void> {
-        await this.syncInvoice(invoice, InvoiceStatus.VOID);
+        await this.syncInvoice(invoice, InvoiceStatus.PAST_DUE);
     }
 
     private async syncInvoice(
@@ -153,6 +153,10 @@ export class StripeWebhooksService {
                 periodStart: new Date(invoice.period_start * 1000),
                 periodEnd: new Date(invoice.period_end * 1000),
                 status,
+                attemptCount: invoice.attempt_count ?? 0,
+                nextPaymentAttemptAt: invoice.next_payment_attempt
+                    ? new Date(invoice.next_payment_attempt * 1000)
+                    : null,
             });
         } catch (error) {
             this.ignoreNotFound(error);

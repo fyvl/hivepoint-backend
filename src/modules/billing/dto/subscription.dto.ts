@@ -21,6 +21,9 @@ export class SubscriptionPlanDto {
     @ApiProperty({ example: 10000 })
     quotaRequests!: number;
 
+    @ApiProperty({ example: 120, nullable: true })
+    rateLimitRpm!: number | null;
+
     @ApiProperty({ example: 'uuid' })
     productId!: string;
 }
@@ -46,6 +49,12 @@ export class SubscriptionInvoiceDto {
     @ApiProperty({ example: 'USD' })
     currency!: string;
 
+    @ApiProperty({ example: 2 })
+    attemptCount!: number;
+
+    @ApiProperty({ type: String, format: 'date-time', nullable: true })
+    nextPaymentAttemptAt!: Date | null;
+
     @ApiProperty({ type: String, format: 'date-time' })
     createdAt!: Date;
 }
@@ -62,6 +71,9 @@ export class SubscriptionDto {
 
     @ApiProperty({ type: String, format: 'date-time', nullable: true })
     currentPeriodEnd!: Date | null;
+
+    @ApiProperty({ type: String, format: 'date-time', nullable: true })
+    gracePeriodEndsAt!: Date | null;
 
     @ApiProperty({ example: false })
     cancelAtPeriodEnd!: boolean;

@@ -20,6 +20,9 @@ export class CreatePlanDto {
     @ApiProperty({ example: 10000, minimum: 1 })
     quotaRequests!: number;
 
+    @ApiPropertyOptional({ example: 120, minimum: 1 })
+    rateLimitRpm?: number;
+
     @ApiPropertyOptional({ example: true })
     isActive?: boolean;
 }

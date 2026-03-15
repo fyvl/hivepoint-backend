@@ -53,6 +53,8 @@ describe('GatewayController', () => {
                 subscriptionId: 'sub-1',
                 requestCount: 1,
                 remainingRequests: 99,
+                rateLimitRpm: 120,
+                remainingRateLimitRequests: 119,
                 usageRecorded: true,
                 periodEnd: new Date('2026-04-12T00:00:00.000Z'),
             },
@@ -96,6 +98,8 @@ describe('GatewayController', () => {
                 subscriptionId: 'sub-1',
                 requestCount: 1,
                 remainingRequests: 41,
+                rateLimitRpm: 120,
+                remainingRateLimitRequests: 40,
                 usageRecorded: true,
                 periodEnd: new Date('2026-04-12T00:00:00.000Z'),
             },
@@ -112,6 +116,8 @@ describe('GatewayController', () => {
         expect(response.headers['x-upstream-request-id']).toBe('req-1');
         expect(response.headers['x-hivepoint-subscription-id']).toBe('sub-1');
         expect(response.headers['x-hivepoint-remaining-requests']).toBe('41');
+        expect(response.headers['x-hivepoint-rate-limit-rpm']).toBe('120');
+        expect(response.headers['x-hivepoint-rate-limit-remaining']).toBe('40');
         expect(gatewayService.proxy).toHaveBeenCalledWith(
             expect.objectContaining({
                 productId: 'prod-1',

@@ -10,6 +10,12 @@ export class GatewayUsageMetaDto {
     @ApiProperty({ example: 99, nullable: true })
     remainingRequests!: number | null;
 
+    @ApiProperty({ example: 120, nullable: true })
+    rateLimitRpm!: number | null;
+
+    @ApiProperty({ example: 52, nullable: true })
+    remainingRateLimitRequests!: number | null;
+
     @ApiProperty({ example: true })
     usageRecorded!: boolean;
 

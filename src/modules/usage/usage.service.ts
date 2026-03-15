@@ -12,6 +12,8 @@ import { RecordUsageResponseDto } from './dto/record-usage-response.dto';
 import { UsageSummaryResponseDto } from './dto/usage-summary.dto';
 import type { AuthorizeUsageInput, RecordUsageInput } from './usage.schemas';
 
+const RATE_LIMIT_WINDOW_SECONDS = 60;
+
 @Injectable()
 export class UsageService {
     constructor(
@@ -50,20 +52,29 @@ export class UsageService {
     async getSummary(
         user: AuthenticatedUser,
     ): Promise<UsageSummaryResponseDto> {
+        const occurredAt = new Date();
         const subscriptions = await this.prisma.subscription.findMany({
             where: {
                 userId: user.id,
-                status: SubscriptionStatus.ACTIVE,
+                status: {
+                    in: [
+                        SubscriptionStatus.ACTIVE,
+                        SubscriptionStatus.PAST_DUE,
+                    ],
+                },
             },
             select: {
                 id: true,
+                status: true,
                 currentPeriodStart: true,
                 currentPeriodEnd: true,
+                gracePeriodEndsAt: true,
                 plan: {
                     select: {
                         id: true,
                         name: true,
                         quotaRequests: true,
+                        rateLimitRpm: true,
                         product: {
                             select: {
                                 id: true,
@@ -77,21 +88,26 @@ export class UsageService {
 
         const activeWithPeriod = subscriptions.filter(
             (subscription) =>
-                subscription.currentPeriodStart &&
-                subscription.currentPeriodEnd,
+                this.getUsageWindow(subscription, occurredAt) !== null,
         );
 
         if (activeWithPeriod.length === 0) {
             return { items: [] };
         }
 
-        const orFilters = activeWithPeriod.map((subscription) => ({
-            subscriptionId: subscription.id,
-            occurredAt: {
-                gte: subscription.currentPeriodStart as Date,
-                lt: subscription.currentPeriodEnd as Date,
-            },
-        }));
+        const orFilters = activeWithPeriod.flatMap((subscription) => {
+            const usageWindow = this.getUsageWindow(subscription, occurredAt);
+            if (!usageWindow) {
+                return [];
+            }
+
+            return [
+                {
+                    subscriptionId: subscription.id,
+                    occurredAt: usageWindow,
+                },
+            ];
+        });
 
         const grouped = await this.prisma.usageRecord.groupBy({
             by: ['subscriptionId'],
@@ -111,6 +127,7 @@ export class UsageService {
         );
 
         const items = activeWithPeriod.map((subscription) => {
+            const usageWindow = this.getUsageWindow(subscription, occurredAt);
             const usedRequests = usageMap.get(subscription.id) ?? 0;
             const quotaRequests = subscription.plan.quotaRequests;
             const percent =
@@ -123,8 +140,10 @@ export class UsageService {
 
             return {
                 subscriptionId: subscription.id,
-                periodStart: subscription.currentPeriodStart as Date,
-                periodEnd: subscription.currentPeriodEnd as Date,
+                status: subscription.status,
+                periodStart: usageWindow?.gte as Date,
+                periodEnd: usageWindow?.lt as Date,
+                gracePeriodEndsAt: subscription.gracePeriodEndsAt,
                 usedRequests,
                 quotaRequests,
                 percent,
@@ -132,6 +151,7 @@ export class UsageService {
                     id: subscription.plan.id,
                     name: subscription.plan.name,
                     quotaRequests: subscription.plan.quotaRequests,
+                    rateLimitRpm: subscription.plan.rateLimitRpm,
                 },
                 product: {
                     id: subscription.plan.product.id,
@@ -190,27 +210,54 @@ export class UsageService {
         const subscription = await this.prisma.subscription.findFirst({
             where: {
                 userId: apiKey.userId,
-                status: SubscriptionStatus.ACTIVE,
-                currentPeriodStart: {
-                    lte: occurredAt,
-                },
-                currentPeriodEnd: {
-                    gt: occurredAt,
-                },
                 plan: {
                     productId: input.productId,
                 },
+                OR: [
+                    {
+                        status: SubscriptionStatus.ACTIVE,
+                        currentPeriodStart: {
+                            lte: occurredAt,
+                        },
+                        currentPeriodEnd: {
+                            gt: occurredAt,
+                        },
+                    },
+                    {
+                        status: SubscriptionStatus.PAST_DUE,
+                        currentPeriodStart: {
+                            lte: occurredAt,
+                        },
+                        gracePeriodEndsAt: {
+                            gt: occurredAt,
+                        },
+                    },
+                ],
             },
+            orderBy: [
+                {
+                    gracePeriodEndsAt: 'desc',
+                },
+                {
+                    currentPeriodEnd: 'desc',
+                },
+                {
+                    createdAt: 'desc',
+                },
+            ],
             select: {
                 id: true,
                 userId: true,
+                status: true,
                 currentPeriodStart: true,
                 currentPeriodEnd: true,
+                gracePeriodEndsAt: true,
                 plan: {
                     select: {
                         id: true,
                         name: true,
                         quotaRequests: true,
+                        rateLimitRpm: true,
                         product: {
                             select: {
                                 id: true,
@@ -222,11 +269,7 @@ export class UsageService {
             },
         });
 
-        if (
-            !subscription ||
-            !subscription.currentPeriodStart ||
-            !subscription.currentPeriodEnd
-        ) {
+        if (!subscription || !this.getUsageWindow(subscription, occurredAt)) {
             return {
                 allowed: false,
                 reason: 'NO_ACTIVE_SUBSCRIPTION',
@@ -250,12 +293,25 @@ export class UsageService {
             });
         }
 
+        const usageWindow = this.getUsageWindow(subscription, occurredAt);
+        if (!usageWindow) {
+            return {
+                allowed: false,
+                reason: 'NO_ACTIVE_SUBSCRIPTION',
+                apiKeyId: apiKey.id,
+                userId: apiKey.userId,
+                product,
+                requestedRequests: input.requestCount,
+                usageRecorded: false,
+            };
+        }
+
         const usageAggregate = await this.prisma.usageRecord.aggregate({
             where: {
                 subscriptionId: subscription.id,
                 occurredAt: {
-                    gte: subscription.currentPeriodStart,
-                    lt: subscription.currentPeriodEnd,
+                    gte: usageWindow.gte,
+                    lt: usageWindow.lt,
                 },
             },
             _sum: {
@@ -267,6 +323,8 @@ export class UsageService {
         const quotaRequests = subscription.plan.quotaRequests;
         const requestedRequests = input.requestCount;
         const nextUsedRequests = usedRequests + requestedRequests;
+        const rateLimitRpm = subscription.plan.rateLimitRpm ?? null;
+        let remainingRateLimitRequests: number | null = null;
 
         if (nextUsedRequests > quotaRequests) {
             return {
@@ -275,20 +333,77 @@ export class UsageService {
                 apiKeyId: apiKey.id,
                 subscriptionId: subscription.id,
                 userId: subscription.userId,
-                periodStart: subscription.currentPeriodStart,
-                periodEnd: subscription.currentPeriodEnd,
+                periodStart: usageWindow.gte,
+                periodEnd: usageWindow.lt,
                 usedRequests,
                 requestedRequests,
                 quotaRequests,
                 remainingRequests: Math.max(0, quotaRequests - usedRequests),
+                rateLimitRpm,
+                remainingRateLimitRequests,
                 usageRecorded: false,
                 plan: {
                     id: subscription.plan.id,
                     name: subscription.plan.name,
                     quotaRequests: subscription.plan.quotaRequests,
+                    rateLimitRpm: subscription.plan.rateLimitRpm,
                 },
                 product: subscription.plan.product,
             };
+        }
+
+        if (typeof rateLimitRpm === 'number') {
+            const rateLimitUsageAggregate = await this.prisma.usageRecord.aggregate({
+                where: {
+                    subscriptionId: subscription.id,
+                    occurredAt: {
+                        gte: this.getRateLimitWindowStart(
+                            occurredAt,
+                            usageWindow.gte,
+                        ),
+                        lte: occurredAt,
+                    },
+                },
+                _sum: {
+                    requestCount: true,
+                },
+            });
+
+            const usedRateLimitRequests =
+                rateLimitUsageAggregate._sum.requestCount ?? 0;
+            remainingRateLimitRequests = Math.max(
+                0,
+                rateLimitRpm - usedRateLimitRequests,
+            );
+
+            if (usedRateLimitRequests + requestedRequests > rateLimitRpm) {
+                return {
+                    allowed: false,
+                    reason: 'RATE_LIMIT_EXCEEDED',
+                    apiKeyId: apiKey.id,
+                    subscriptionId: subscription.id,
+                    userId: subscription.userId,
+                    periodStart: usageWindow.gte,
+                    periodEnd: usageWindow.lt,
+                    usedRequests,
+                    requestedRequests,
+                    quotaRequests,
+                    remainingRequests: Math.max(
+                        0,
+                        quotaRequests - usedRequests,
+                    ),
+                    rateLimitRpm,
+                    remainingRateLimitRequests,
+                    usageRecorded: false,
+                    plan: {
+                        id: subscription.plan.id,
+                        name: subscription.plan.name,
+                        quotaRequests: subscription.plan.quotaRequests,
+                        rateLimitRpm: subscription.plan.rateLimitRpm,
+                    },
+                    product: subscription.plan.product,
+                };
+            }
         }
 
         return {
@@ -296,17 +411,20 @@ export class UsageService {
             apiKeyId: apiKey.id,
             subscriptionId: subscription.id,
             userId: subscription.userId,
-            periodStart: subscription.currentPeriodStart,
-            periodEnd: subscription.currentPeriodEnd,
+            periodStart: usageWindow.gte,
+            periodEnd: usageWindow.lt,
             usedRequests,
             requestedRequests,
             quotaRequests,
             remainingRequests: Math.max(0, quotaRequests - usedRequests),
+            rateLimitRpm,
+            remainingRateLimitRequests,
             usageRecorded: false,
             plan: {
                 id: subscription.plan.id,
                 name: subscription.plan.name,
                 quotaRequests: subscription.plan.quotaRequests,
+                rateLimitRpm: subscription.plan.rateLimitRpm,
             },
             product: subscription.plan.product,
         };
@@ -324,27 +442,54 @@ export class UsageService {
             const subscription = await tx.subscription.findFirst({
                 where: {
                     userId: params.userId,
-                    status: SubscriptionStatus.ACTIVE,
-                    currentPeriodStart: {
-                        lte: params.occurredAt,
-                    },
-                    currentPeriodEnd: {
-                        gt: params.occurredAt,
-                    },
                     plan: {
                         productId: params.productId,
                     },
+                    OR: [
+                        {
+                            status: SubscriptionStatus.ACTIVE,
+                            currentPeriodStart: {
+                                lte: params.occurredAt,
+                            },
+                            currentPeriodEnd: {
+                                gt: params.occurredAt,
+                            },
+                        },
+                        {
+                            status: SubscriptionStatus.PAST_DUE,
+                            currentPeriodStart: {
+                                lte: params.occurredAt,
+                            },
+                            gracePeriodEndsAt: {
+                                gt: params.occurredAt,
+                            },
+                        },
+                    ],
                 },
+                orderBy: [
+                    {
+                        gracePeriodEndsAt: 'desc',
+                    },
+                    {
+                        currentPeriodEnd: 'desc',
+                    },
+                    {
+                        createdAt: 'desc',
+                    },
+                ],
                 select: {
                     id: true,
                     userId: true,
+                    status: true,
                     currentPeriodStart: true,
                     currentPeriodEnd: true,
+                    gracePeriodEndsAt: true,
                     plan: {
                         select: {
                             id: true,
                             name: true,
                             quotaRequests: true,
+                            rateLimitRpm: true,
                             product: {
                                 select: {
                                     id: true,
@@ -358,8 +503,7 @@ export class UsageService {
 
             if (
                 !subscription ||
-                !subscription.currentPeriodStart ||
-                !subscription.currentPeriodEnd
+                !this.getUsageWindow(subscription, params.occurredAt)
             ) {
                 return {
                     allowed: false,
@@ -378,12 +522,27 @@ export class UsageService {
                 FOR UPDATE
             `;
 
+            const usageWindow = this.getUsageWindow(
+                subscription,
+                params.occurredAt,
+            );
+            if (!usageWindow) {
+                return {
+                    allowed: false,
+                    reason: 'NO_ACTIVE_SUBSCRIPTION',
+                    apiKeyId: params.apiKeyId,
+                    userId: params.userId,
+                    requestedRequests: params.requestCount,
+                    usageRecorded: false,
+                };
+            }
+
             const usageAggregate = await tx.usageRecord.aggregate({
                 where: {
                     subscriptionId: subscription.id,
                     occurredAt: {
-                        gte: subscription.currentPeriodStart,
-                        lt: subscription.currentPeriodEnd,
+                        gte: usageWindow.gte,
+                        lt: usageWindow.lt,
                     },
                 },
                 _sum: {
@@ -394,6 +553,8 @@ export class UsageService {
             const usedRequests = usageAggregate._sum.requestCount ?? 0;
             const quotaRequests = subscription.plan.quotaRequests;
             const nextUsedRequests = usedRequests + params.requestCount;
+            const rateLimitRpm = subscription.plan.rateLimitRpm ?? null;
+            let remainingRateLimitRequests: number | null = null;
 
             if (nextUsedRequests > quotaRequests) {
                 return {
@@ -402,8 +563,8 @@ export class UsageService {
                     apiKeyId: params.apiKeyId,
                     subscriptionId: subscription.id,
                     userId: subscription.userId,
-                    periodStart: subscription.currentPeriodStart,
-                    periodEnd: subscription.currentPeriodEnd,
+                    periodStart: usageWindow.gte,
+                    periodEnd: usageWindow.lt,
                     usedRequests,
                     requestedRequests: params.requestCount,
                     quotaRequests,
@@ -411,14 +572,79 @@ export class UsageService {
                         0,
                         quotaRequests - usedRequests,
                     ),
+                    rateLimitRpm,
+                    remainingRateLimitRequests,
                     usageRecorded: false,
                     plan: {
                         id: subscription.plan.id,
                         name: subscription.plan.name,
                         quotaRequests: subscription.plan.quotaRequests,
+                        rateLimitRpm: subscription.plan.rateLimitRpm,
                     },
                     product: subscription.plan.product,
                 };
+            }
+
+            if (typeof rateLimitRpm === 'number') {
+                const rateLimitUsageAggregate = await tx.usageRecord.aggregate({
+                    where: {
+                        subscriptionId: subscription.id,
+                        occurredAt: {
+                            gte: this.getRateLimitWindowStart(
+                                params.occurredAt,
+                                usageWindow.gte,
+                            ),
+                            lte: params.occurredAt,
+                        },
+                    },
+                    _sum: {
+                        requestCount: true,
+                    },
+                });
+
+                const usedRateLimitRequests =
+                    rateLimitUsageAggregate._sum.requestCount ?? 0;
+                remainingRateLimitRequests = Math.max(
+                    0,
+                    rateLimitRpm - usedRateLimitRequests,
+                );
+
+                if (
+                    usedRateLimitRequests + params.requestCount >
+                    rateLimitRpm
+                ) {
+                    return {
+                        allowed: false,
+                        reason: 'RATE_LIMIT_EXCEEDED',
+                        apiKeyId: params.apiKeyId,
+                        subscriptionId: subscription.id,
+                        userId: subscription.userId,
+                        periodStart: usageWindow.gte,
+                        periodEnd: usageWindow.lt,
+                        usedRequests,
+                        requestedRequests: params.requestCount,
+                        quotaRequests,
+                        remainingRequests: Math.max(
+                            0,
+                            quotaRequests - usedRequests,
+                        ),
+                        rateLimitRpm,
+                        remainingRateLimitRequests,
+                        usageRecorded: false,
+                        plan: {
+                            id: subscription.plan.id,
+                            name: subscription.plan.name,
+                            quotaRequests: subscription.plan.quotaRequests,
+                            rateLimitRpm: subscription.plan.rateLimitRpm,
+                        },
+                        product: subscription.plan.product,
+                    };
+                }
+
+                remainingRateLimitRequests = Math.max(
+                    0,
+                    rateLimitRpm - usedRateLimitRequests - params.requestCount,
+                );
             }
 
             await tx.usageRecord.create({
@@ -435,8 +661,8 @@ export class UsageService {
                 apiKeyId: params.apiKeyId,
                 subscriptionId: subscription.id,
                 userId: subscription.userId,
-                periodStart: subscription.currentPeriodStart,
-                periodEnd: subscription.currentPeriodEnd,
+                periodStart: usageWindow.gte,
+                periodEnd: usageWindow.lt,
                 usedRequests: nextUsedRequests,
                 requestedRequests: params.requestCount,
                 quotaRequests,
@@ -444,15 +670,70 @@ export class UsageService {
                     0,
                     quotaRequests - nextUsedRequests,
                 ),
+                rateLimitRpm,
+                remainingRateLimitRequests,
                 usageRecorded: true,
                 plan: {
                     id: subscription.plan.id,
                     name: subscription.plan.name,
                     quotaRequests: subscription.plan.quotaRequests,
+                    rateLimitRpm: subscription.plan.rateLimitRpm,
                 },
                 product: subscription.plan.product,
             };
         });
+    }
+
+    private getRateLimitWindowStart(
+        occurredAt: Date,
+        periodStart: Date,
+    ): Date {
+        const rateLimitWindowStart = new Date(
+            occurredAt.getTime() - RATE_LIMIT_WINDOW_SECONDS * 1000,
+        );
+
+        return rateLimitWindowStart > periodStart
+            ? rateLimitWindowStart
+            : periodStart;
+    }
+
+    private getUsageWindow(
+        subscription: {
+            status: SubscriptionStatus;
+            currentPeriodStart: Date | null;
+            currentPeriodEnd?: Date | null;
+            gracePeriodEndsAt?: Date | null;
+        },
+        occurredAt: Date,
+    ): { gte: Date; lt: Date } | null {
+        const { currentPeriodStart } = subscription;
+        if (!currentPeriodStart || currentPeriodStart > occurredAt) {
+            return null;
+        }
+
+        if (subscription.status === SubscriptionStatus.PAST_DUE) {
+            const gracePeriodEndsAt = subscription.gracePeriodEndsAt ?? null;
+            if (!gracePeriodEndsAt || gracePeriodEndsAt <= occurredAt) {
+                return null;
+            }
+
+            return {
+                gte: currentPeriodStart,
+                lt: gracePeriodEndsAt,
+            };
+        }
+
+        if (
+            !subscription.currentPeriodEnd ||
+            subscription.currentPeriodEnd <= occurredAt
+        ) {
+            return null;
+        }
+
+        return {
+            gte: currentPeriodStart,
+            lt: subscription.currentPeriodEnd,
+        };
     }
 
     private async createUsageRecord(input: RecordUsageInput): Promise<void> {
@@ -461,6 +742,9 @@ export class UsageService {
             select: {
                 id: true,
                 status: true,
+                currentPeriodStart: true,
+                currentPeriodEnd: true,
+                gracePeriodEndsAt: true,
             },
         });
 
@@ -472,17 +756,17 @@ export class UsageService {
             });
         }
 
-        if (subscription.status !== SubscriptionStatus.ACTIVE) {
+        const occurredAt = input.occurredAt
+            ? new Date(input.occurredAt)
+            : new Date();
+
+        if (!this.getUsageWindow(subscription, occurredAt)) {
             throw new AppError({
                 code: ErrorCodes.SUBSCRIPTION_NOT_ACTIVE,
                 message: 'SUBSCRIPTION_NOT_ACTIVE',
                 httpStatus: 400,
             });
         }
-
-        const occurredAt = input.occurredAt
-            ? new Date(input.occurredAt)
-            : new Date();
 
         await this.prisma.usageRecord.create({
             data: {

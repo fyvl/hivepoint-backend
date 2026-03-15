@@ -8,6 +8,7 @@ import {
     SubscriptionStatus,
     VersionStatus,
 } from '@prisma/client';
+import { AppConfigService } from '../../common/config/config.service';
 import type { AuthenticatedUser } from '../../common/decorators/user.decorator';
 import { AppError } from '../../common/errors/app.error';
 import { ErrorCodes } from '../../common/errors/error.codes';
@@ -31,6 +32,7 @@ import { StripePaymentProvider } from './payment/stripe-payment.provider';
 export class SubscriptionsService {
     constructor(
         private readonly prisma: PrismaService,
+        private readonly configService: AppConfigService,
         @Inject(PAYMENT_PROVIDER)
         private readonly activePaymentProvider: PaymentProvider,
         private readonly mockPaymentProvider: MockPaymentProvider,
@@ -50,6 +52,7 @@ export class SubscriptionsService {
                 status: true,
                 currentPeriodStart: true,
                 currentPeriodEnd: true,
+                gracePeriodEndsAt: true,
                 cancelAtPeriodEnd: true,
                 paymentProvider: true,
                 externalSubscriptionId: true,
@@ -68,6 +71,7 @@ export class SubscriptionsService {
                         priceCents: true,
                         currency: true,
                         quotaRequests: true,
+                        rateLimitRpm: true,
                         productId: true,
                         product: {
                             select: {
@@ -86,6 +90,8 @@ export class SubscriptionsService {
                 status: invoice.status,
                 amountCents: invoice.amountCents,
                 currency: invoice.currency,
+                attemptCount: invoice.attemptCount,
+                nextPaymentAttemptAt: invoice.nextPaymentAttemptAt,
                 createdAt: invoice.createdAt,
             }));
 
@@ -94,6 +100,7 @@ export class SubscriptionsService {
                 status: subscription.status,
                 currentPeriodStart: subscription.currentPeriodStart,
                 currentPeriodEnd: subscription.currentPeriodEnd,
+                gracePeriodEndsAt: subscription.gracePeriodEndsAt,
                 cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
                 paymentProvider: subscription.paymentProvider,
                 hasExternalSubscription: Boolean(
@@ -107,6 +114,7 @@ export class SubscriptionsService {
                     priceCents: subscription.plan.priceCents,
                     currency: subscription.plan.currency,
                     quotaRequests: subscription.plan.quotaRequests,
+                    rateLimitRpm: subscription.plan.rateLimitRpm,
                     productId: subscription.plan.productId,
                 },
                 product: {
@@ -208,6 +216,7 @@ export class SubscriptionsService {
                     select: {
                         id: true,
                         status: true,
+                        gracePeriodEndsAt: true,
                         cancelAtPeriodEnd: true,
                         paymentProvider: true,
                         plan: {
@@ -239,6 +248,7 @@ export class SubscriptionsService {
             invoiceStatus: invoice.status,
             subscriptionId: invoice.subscription.id,
             subscriptionStatus: invoice.subscription.status,
+            gracePeriodEndsAt: invoice.subscription.gracePeriodEndsAt,
             cancelAtPeriodEnd: invoice.subscription.cancelAtPeriodEnd,
             paymentProvider: invoice.subscription.paymentProvider,
             productTitle: invoice.subscription.plan.product.title,
@@ -514,6 +524,8 @@ export class SubscriptionsService {
         periodStart: Date;
         periodEnd: Date;
         status: InvoiceStatus;
+        attemptCount?: number | null;
+        nextPaymentAttemptAt?: Date | null;
     }): Promise<{ ok: true; invoiceId: string }> {
         const invoiceId = await this.resolveInvoiceForExternalSync(params);
 
@@ -529,6 +541,8 @@ export class SubscriptionsService {
                     amountCents: params.amountCents,
                     currency: params.currency,
                     status: InvoiceStatus.DRAFT,
+                    attemptCount: params.attemptCount ?? 0,
+                    nextPaymentAttemptAt: params.nextPaymentAttemptAt ?? null,
                     periodStart: params.periodStart,
                     periodEnd: params.periodEnd,
                 },
@@ -544,6 +558,7 @@ export class SubscriptionsService {
                 externalCheckoutSessionId: params.externalCheckoutSessionId,
                 externalInvoiceId: params.externalInvoiceId,
                 externalSubscriptionId: params.externalSubscriptionId,
+                attemptCount: params.attemptCount,
             });
 
             return { ok: true, invoiceId };
@@ -555,6 +570,9 @@ export class SubscriptionsService {
             externalCheckoutSessionId: params.externalCheckoutSessionId,
             externalInvoiceId: params.externalInvoiceId,
             externalSubscriptionId: params.externalSubscriptionId,
+            invoiceStatus: params.status,
+            attemptCount: params.attemptCount,
+            nextPaymentAttemptAt: params.nextPaymentAttemptAt,
         });
 
         return { ok: true, invoiceId };
@@ -566,6 +584,7 @@ export class SubscriptionsService {
         externalCheckoutSessionId?: string;
         externalInvoiceId?: string;
         externalSubscriptionId?: string;
+        attemptCount?: number | null;
     }): Promise<{ ok: true; ignored?: true }> {
         const invoice = await this.prisma.invoice.findUnique({
             where: { id: params.invoiceId },
@@ -574,6 +593,7 @@ export class SubscriptionsService {
                 status: true,
                 externalCheckoutSessionId: true,
                 externalInvoiceId: true,
+                attemptCount: true,
                 periodStart: true,
                 periodEnd: true,
                 subscription: {
@@ -614,6 +634,9 @@ export class SubscriptionsService {
                     invoice.externalCheckoutSessionId,
                 externalInvoiceId:
                     params.externalInvoiceId ?? invoice.externalInvoiceId,
+                attemptCount:
+                    params.attemptCount ?? invoice.attemptCount ?? 0,
+                nextPaymentAttemptAt: null,
             },
         });
 
@@ -629,6 +652,7 @@ export class SubscriptionsService {
                     invoice.subscription.externalSubscriptionId,
                 currentPeriodStart: invoice.periodStart,
                 currentPeriodEnd: invoice.periodEnd,
+                gracePeriodEndsAt: null,
             },
         });
 
@@ -641,6 +665,9 @@ export class SubscriptionsService {
         externalCheckoutSessionId?: string;
         externalInvoiceId?: string;
         externalSubscriptionId?: string;
+        invoiceStatus?: InvoiceStatus;
+        attemptCount?: number | null;
+        nextPaymentAttemptAt?: Date | null;
     }): Promise<{ ok: true; ignored?: true }> {
         const invoice = await this.prisma.invoice.findUnique({
             where: { id: params.invoiceId },
@@ -649,10 +676,14 @@ export class SubscriptionsService {
                 status: true,
                 externalInvoiceId: true,
                 externalCheckoutSessionId: true,
+                attemptCount: true,
                 subscription: {
                     select: {
                         id: true,
                         status: true,
+                        currentPeriodStart: true,
+                        currentPeriodEnd: true,
+                        gracePeriodEndsAt: true,
                         externalSubscriptionId: true,
                     },
                 },
@@ -676,35 +707,49 @@ export class SubscriptionsService {
             return { ok: true, ignored: true };
         }
 
-        if (invoice.status !== InvoiceStatus.VOID) {
-            await this.prisma.invoice.update({
-                where: { id: invoice.id },
-                data: {
-                    status: InvoiceStatus.VOID,
-                    paymentProvider: this.toPrismaPaymentProvider(
-                        params.paymentProvider,
-                    ),
-                    externalCheckoutSessionId:
-                        params.externalCheckoutSessionId ??
-                        invoice.externalCheckoutSessionId,
-                    externalInvoiceId:
-                        params.externalInvoiceId ?? invoice.externalInvoiceId,
-                },
-            });
-        }
+        const invoiceStatus = params.invoiceStatus ?? InvoiceStatus.VOID;
+
+        await this.prisma.invoice.update({
+            where: { id: invoice.id },
+            data: {
+                status: invoiceStatus,
+                paymentProvider: this.toPrismaPaymentProvider(
+                    params.paymentProvider,
+                ),
+                externalCheckoutSessionId:
+                    params.externalCheckoutSessionId ??
+                    invoice.externalCheckoutSessionId,
+                externalInvoiceId:
+                    params.externalInvoiceId ?? invoice.externalInvoiceId,
+                attemptCount:
+                    params.attemptCount ??
+                    (invoiceStatus === InvoiceStatus.PAST_DUE
+                        ? Math.max(1, invoice.attemptCount ?? 0)
+                        : 0),
+                nextPaymentAttemptAt:
+                    invoiceStatus === InvoiceStatus.PAST_DUE
+                        ? params.nextPaymentAttemptAt ?? null
+                        : null,
+            },
+        });
 
         await this.prisma.subscription.update({
             where: { id: invoice.subscription.id },
             data: {
+                status: SubscriptionStatus.PAST_DUE,
                 paymentProvider: this.toPrismaPaymentProvider(
                     params.paymentProvider,
                 ),
                 externalSubscriptionId:
                     params.externalSubscriptionId ??
                     invoice.subscription.externalSubscriptionId,
-                ...(invoice.subscription.status !== SubscriptionStatus.ACTIVE
-                    ? { status: SubscriptionStatus.PAST_DUE }
-                    : {}),
+                gracePeriodEndsAt: this.resolveGracePeriodEndsAt({
+                    status: SubscriptionStatus.PAST_DUE,
+                    currentPeriodStart: invoice.subscription.currentPeriodStart,
+                    currentPeriodEnd: invoice.subscription.currentPeriodEnd,
+                    existingGracePeriodEndsAt:
+                        invoice.subscription.gracePeriodEndsAt,
+                }),
             },
         });
 
@@ -731,6 +776,7 @@ export class SubscriptionsService {
             where: { id: subscription.id },
             data: {
                 status: SubscriptionStatus.CANCELED,
+                gracePeriodEndsAt: null,
                 cancelAtPeriodEnd: false,
             },
         });
@@ -747,7 +793,12 @@ export class SubscriptionsService {
     }): Promise<{ ok: true }> {
         const subscription = await this.prisma.subscription.findUnique({
             where: { externalSubscriptionId: params.externalSubscriptionId },
-            select: { id: true },
+            select: {
+                id: true,
+                currentPeriodStart: true,
+                currentPeriodEnd: true,
+                gracePeriodEndsAt: true,
+            },
         });
 
         if (!subscription) {
@@ -763,6 +814,23 @@ export class SubscriptionsService {
             data: {
                 cancelAtPeriodEnd: params.cancelAtPeriodEnd,
                 ...(params.status ? { status: params.status } : {}),
+                ...(params.status !== undefined
+                    ? {
+                          gracePeriodEndsAt: this.resolveGracePeriodEndsAt({
+                              status: params.status,
+                              currentPeriodStart:
+                                  params.currentPeriodStart !== undefined
+                                      ? params.currentPeriodStart
+                                      : subscription.currentPeriodStart,
+                              currentPeriodEnd:
+                                  params.currentPeriodEnd !== undefined
+                                      ? params.currentPeriodEnd
+                                      : subscription.currentPeriodEnd,
+                              existingGracePeriodEndsAt:
+                                  subscription.gracePeriodEndsAt,
+                          }),
+                      }
+                    : {}),
                 ...(params.currentPeriodStart !== undefined
                     ? { currentPeriodStart: params.currentPeriodStart }
                     : {}),
@@ -773,6 +841,45 @@ export class SubscriptionsService {
         });
 
         return { ok: true };
+    }
+
+    private resolveGracePeriodEndsAt(params: {
+        status: SubscriptionStatus;
+        currentPeriodStart?: Date | null;
+        currentPeriodEnd?: Date | null;
+        existingGracePeriodEndsAt?: Date | null;
+    }): Date | null {
+        if (params.status !== SubscriptionStatus.PAST_DUE) {
+            return null;
+        }
+
+        if (!params.currentPeriodStart) {
+            return null;
+        }
+
+        const graceDays = this.configService.billingGracePeriodDays;
+        if (graceDays <= 0) {
+            return null;
+        }
+
+        const now = new Date();
+        const graceBase =
+            params.currentPeriodEnd && params.currentPeriodEnd > now
+                ? params.currentPeriodEnd
+                : now;
+        const gracePeriodEndsAt = new Date(graceBase);
+        gracePeriodEndsAt.setUTCDate(
+            gracePeriodEndsAt.getUTCDate() + graceDays,
+        );
+
+        if (
+            params.existingGracePeriodEndsAt &&
+            params.existingGracePeriodEndsAt > gracePeriodEndsAt
+        ) {
+            return params.existingGracePeriodEndsAt;
+        }
+
+        return gracePeriodEndsAt;
     }
 
     private getInvoicePeriod(): { periodStart: Date; periodEnd: Date } {

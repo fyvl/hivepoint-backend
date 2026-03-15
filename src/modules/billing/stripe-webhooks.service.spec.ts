@@ -9,6 +9,9 @@ describe('StripeWebhooksService', () => {
     let stripeClientService: {
         constructWebhookEvent: jest.Mock;
         client: {
+            invoices: {
+                retrieve: jest.Mock;
+            };
             subscriptions: {
                 retrieve: jest.Mock;
             };
@@ -26,6 +29,9 @@ describe('StripeWebhooksService', () => {
         stripeClientService = {
             constructWebhookEvent: jest.fn(),
             client: {
+                invoices: {
+                    retrieve: jest.fn(),
+                },
                 subscriptions: {
                     retrieve: jest.fn(),
                 },
@@ -122,6 +128,8 @@ describe('StripeWebhooksService', () => {
             periodStart: new Date(1773344775 * 1000),
             periodEnd: new Date(1775936775 * 1000),
             status: InvoiceStatus.PAID,
+            attemptCount: 0,
+            nextPaymentAttemptAt: null,
         });
         expect(
             stripeClientService.client.subscriptions.retrieve,
@@ -166,6 +174,51 @@ describe('StripeWebhooksService', () => {
             periodStart: new Date(1775936775 * 1000),
             periodEnd: new Date(1778615175 * 1000),
             status: InvoiceStatus.DRAFT,
+            attemptCount: 0,
+            nextPaymentAttemptAt: null,
+        });
+    });
+
+    it('syncs payment failed invoices as past due with retry metadata', async () => {
+        stripeClientService.constructWebhookEvent.mockReturnValue({
+            type: 'invoice.payment_failed',
+            data: {
+                object: {
+                    id: 'in_cycle_124',
+                    billing_reason: 'subscription_cycle',
+                    total: 4900,
+                    currency: 'usd',
+                    attempt_count: 2,
+                    next_payment_attempt: 1778701575,
+                    period_start: 1775936775,
+                    period_end: 1778615175,
+                    parent: {
+                        subscription_details: {
+                            metadata: {},
+                            subscription: 'sub_123',
+                        },
+                    },
+                },
+            },
+        });
+
+        await service.handleWebhook(Buffer.from('payload'), 'sig');
+
+        expect(
+            subscriptionsService.syncInvoiceFromExternal,
+        ).toHaveBeenCalledWith({
+            paymentProvider: 'STRIPE',
+            externalInvoiceId: 'in_cycle_124',
+            externalSubscriptionId: 'sub_123',
+            metadataInvoiceId: undefined,
+            allowMetadataInvoiceId: false,
+            amountCents: 4900,
+            currency: 'USD',
+            periodStart: new Date(1775936775 * 1000),
+            periodEnd: new Date(1778615175 * 1000),
+            status: InvoiceStatus.PAST_DUE,
+            attemptCount: 2,
+            nextPaymentAttemptAt: new Date(1778701575 * 1000),
         });
     });
 

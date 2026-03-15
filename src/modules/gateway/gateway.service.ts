@@ -175,6 +175,15 @@ export class GatewayService {
                     typeof authorization.remainingRequests === 'number'
                         ? authorization.remainingRequests
                         : null,
+                rateLimitRpm:
+                    typeof authorization.rateLimitRpm === 'number'
+                        ? authorization.rateLimitRpm
+                        : null,
+                remainingRateLimitRequests:
+                    typeof authorization.remainingRateLimitRequests ===
+                    'number'
+                        ? authorization.remainingRateLimitRequests
+                        : null,
                 usageRecorded: authorization.usageRecorded === true,
                 periodEnd: authorization.periodEnd ?? null,
             },
@@ -199,6 +208,12 @@ export class GatewayService {
                 return new AppError({
                     code: ErrorCodes.QUOTA_EXCEEDED,
                     message: 'QUOTA_EXCEEDED',
+                    httpStatus: 429,
+                });
+            case 'RATE_LIMIT_EXCEEDED':
+                return new AppError({
+                    code: ErrorCodes.RATE_LIMIT_EXCEEDED,
+                    message: 'RATE_LIMIT_EXCEEDED',
                     httpStatus: 429,
                 });
             default:

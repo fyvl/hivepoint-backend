@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { SubscriptionStatus } from '@prisma/client';
 
 export class UsageSummaryPlanDto {
     @ApiProperty({ example: 'uuid' })
@@ -9,6 +10,9 @@ export class UsageSummaryPlanDto {
 
     @ApiProperty({ example: 1000 })
     quotaRequests!: number;
+
+    @ApiProperty({ example: 120, nullable: true })
+    rateLimitRpm!: number | null;
 }
 
 export class UsageSummaryProductDto {
@@ -23,11 +27,17 @@ export class UsageSummaryItemDto {
     @ApiProperty({ example: 'uuid' })
     subscriptionId!: string;
 
+    @ApiProperty({ enum: SubscriptionStatus })
+    status!: SubscriptionStatus;
+
     @ApiProperty({ type: String, format: 'date-time' })
     periodStart!: Date;
 
     @ApiProperty({ type: String, format: 'date-time' })
     periodEnd!: Date;
+
+    @ApiProperty({ type: String, format: 'date-time', nullable: true })
+    gracePeriodEndsAt!: Date | null;
 
     @ApiProperty({ example: 123 })
     usedRequests!: number;

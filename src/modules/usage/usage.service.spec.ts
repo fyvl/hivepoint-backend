@@ -122,12 +122,15 @@ describe('UsageService', () => {
         prisma.subscription.findFirst.mockResolvedValue({
             id: 'sub-1',
             userId: 'user-1',
+            status: SubscriptionStatus.ACTIVE,
             currentPeriodStart: periodStart,
             currentPeriodEnd: periodEnd,
+            gracePeriodEndsAt: null,
             plan: {
                 id: 'plan-1',
                 name: 'Starter',
                 quotaRequests: 1000,
+                rateLimitRpm: null,
                 product: {
                     id: 'prod-1',
                     title: 'Payments API',
@@ -177,11 +180,14 @@ describe('UsageService', () => {
             requestedRequests: 2,
             quotaRequests: 1000,
             remainingRequests: 878,
+            rateLimitRpm: null,
+            remainingRateLimitRequests: null,
             usageRecorded: true,
             plan: {
                 id: 'plan-1',
                 name: 'Starter',
                 quotaRequests: 1000,
+                rateLimitRpm: null,
             },
             product: {
                 id: 'prod-1',
@@ -191,8 +197,8 @@ describe('UsageService', () => {
     });
 
     it('authorizes gateway usage without requiring the ingest secret', async () => {
-        const periodStart = new Date('2026-01-01T00:00:00.000Z');
-        const periodEnd = new Date('2026-02-01T00:00:00.000Z');
+        const periodStart = new Date('2099-01-01T00:00:00.000Z');
+        const periodEnd = new Date('2099-02-01T00:00:00.000Z');
 
         prisma.apiProduct.findUnique.mockResolvedValue({
             id: 'prod-1',
@@ -205,12 +211,15 @@ describe('UsageService', () => {
         prisma.subscription.findFirst.mockResolvedValue({
             id: 'sub-1',
             userId: 'user-1',
+            status: SubscriptionStatus.ACTIVE,
             currentPeriodStart: periodStart,
             currentPeriodEnd: periodEnd,
+            gracePeriodEndsAt: null,
             plan: {
                 id: 'plan-1',
                 name: 'Starter',
                 quotaRequests: 1000,
+                rateLimitRpm: null,
                 product: {
                     id: 'prod-1',
                     title: 'Payments API',
@@ -228,19 +237,22 @@ describe('UsageService', () => {
             productId: 'prod-1',
             endpoint: '/v1/search',
             requestCount: 1,
+            occurredAt: '2099-01-25T10:00:00.000Z',
         });
 
         expect(result).toMatchObject({
             allowed: true,
             subscriptionId: 'sub-1',
             remainingRequests: 950,
+            rateLimitRpm: null,
+            remainingRateLimitRequests: null,
             usageRecorded: false,
         });
     });
 
     it('returns quota exceeded when request would exceed plan quota', async () => {
-        const periodStart = new Date('2026-01-01T00:00:00.000Z');
-        const periodEnd = new Date('2026-02-01T00:00:00.000Z');
+        const periodStart = new Date('2099-01-01T00:00:00.000Z');
+        const periodEnd = new Date('2099-02-01T00:00:00.000Z');
 
         prisma.apiProduct.findUnique.mockResolvedValue({
             id: 'prod-1',
@@ -253,12 +265,15 @@ describe('UsageService', () => {
         prisma.subscription.findFirst.mockResolvedValue({
             id: 'sub-1',
             userId: 'user-1',
+            status: SubscriptionStatus.ACTIVE,
             currentPeriodStart: periodStart,
             currentPeriodEnd: periodEnd,
+            gracePeriodEndsAt: null,
             plan: {
                 id: 'plan-1',
                 name: 'Starter',
                 quotaRequests: 100,
+                rateLimitRpm: null,
                 product: {
                     id: 'prod-1',
                     title: 'Payments API',
@@ -277,6 +292,7 @@ describe('UsageService', () => {
                 productId: 'prod-1',
                 endpoint: '/v1/search',
                 requestCount: 2,
+                occurredAt: '2099-01-25T10:00:00.000Z',
             },
             'secret',
         );
@@ -294,11 +310,166 @@ describe('UsageService', () => {
             requestedRequests: 2,
             quotaRequests: 100,
             remainingRequests: 1,
+            rateLimitRpm: null,
+            remainingRateLimitRequests: null,
             usageRecorded: false,
             plan: {
                 id: 'plan-1',
                 name: 'Starter',
                 quotaRequests: 100,
+                rateLimitRpm: null,
+            },
+            product: {
+                id: 'prod-1',
+                title: 'Payments API',
+            },
+        });
+    });
+
+    it('returns rate limit exceeded when gateway traffic exceeds plan rpm', async () => {
+        const periodStart = new Date('2026-01-01T00:00:00.000Z');
+        const periodEnd = new Date('2026-02-01T00:00:00.000Z');
+
+        prisma.apiProduct.findUnique.mockResolvedValue({
+            id: 'prod-1',
+            title: 'Payments API',
+        });
+        prisma.apiKey.findFirst.mockResolvedValue({
+            id: 'key-1',
+            userId: 'user-1',
+        });
+        prisma.subscription.findFirst.mockResolvedValue({
+            id: 'sub-1',
+            userId: 'user-1',
+            status: SubscriptionStatus.ACTIVE,
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            gracePeriodEndsAt: null,
+            plan: {
+                id: 'plan-1',
+                name: 'Starter',
+                quotaRequests: 1000,
+                rateLimitRpm: 60,
+                product: {
+                    id: 'prod-1',
+                    title: 'Payments API',
+                },
+            },
+        });
+        prisma.usageRecord.aggregate
+            .mockResolvedValueOnce({
+                _sum: {
+                    requestCount: 100,
+                },
+            })
+            .mockResolvedValueOnce({
+                _sum: {
+                    requestCount: 60,
+                },
+            });
+
+        const result = await service.authorizeGatewayUsage({
+            apiKey: 'hp_valid',
+            productId: 'prod-1',
+            endpoint: '/v1/search',
+            requestCount: 1,
+            occurredAt: '2026-01-25T10:00:00.000Z',
+            consume: true,
+        });
+
+        expect(prisma.usageRecord.create).not.toHaveBeenCalled();
+        expect(result).toEqual({
+            allowed: false,
+            reason: 'RATE_LIMIT_EXCEEDED',
+            apiKeyId: 'key-1',
+            subscriptionId: 'sub-1',
+            userId: 'user-1',
+            periodStart,
+            periodEnd,
+            usedRequests: 100,
+            requestedRequests: 1,
+            quotaRequests: 1000,
+            remainingRequests: 900,
+            rateLimitRpm: 60,
+            remainingRateLimitRequests: 0,
+            usageRecorded: false,
+            plan: {
+                id: 'plan-1',
+                name: 'Starter',
+                quotaRequests: 1000,
+                rateLimitRpm: 60,
+            },
+            product: {
+                id: 'prod-1',
+                title: 'Payments API',
+            },
+        });
+    });
+
+    it('authorizes past due subscriptions during an active grace period', async () => {
+        const periodStart = new Date('2026-01-01T00:00:00.000Z');
+        const periodEnd = new Date('2026-02-01T00:00:00.000Z');
+        const gracePeriodEndsAt = new Date('2026-02-04T00:00:00.000Z');
+
+        prisma.apiProduct.findUnique.mockResolvedValue({
+            id: 'prod-1',
+            title: 'Payments API',
+        });
+        prisma.apiKey.findFirst.mockResolvedValue({
+            id: 'key-1',
+            userId: 'user-1',
+        });
+        prisma.subscription.findFirst.mockResolvedValue({
+            id: 'sub-1',
+            userId: 'user-1',
+            status: SubscriptionStatus.PAST_DUE,
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            gracePeriodEndsAt,
+            plan: {
+                id: 'plan-1',
+                name: 'Starter',
+                quotaRequests: 1000,
+                rateLimitRpm: null,
+                product: {
+                    id: 'prod-1',
+                    title: 'Payments API',
+                },
+            },
+        });
+        prisma.usageRecord.aggregate.mockResolvedValue({
+            _sum: {
+                requestCount: 200,
+            },
+        });
+
+        const result = await service.authorizeGatewayUsage({
+            apiKey: 'hp_valid',
+            productId: 'prod-1',
+            endpoint: '/v1/search',
+            requestCount: 1,
+            occurredAt: '2026-02-02T10:00:00.000Z',
+        });
+
+        expect(result).toEqual({
+            allowed: true,
+            apiKeyId: 'key-1',
+            subscriptionId: 'sub-1',
+            userId: 'user-1',
+            periodStart,
+            periodEnd: gracePeriodEndsAt,
+            usedRequests: 200,
+            requestedRequests: 1,
+            quotaRequests: 1000,
+            remainingRequests: 800,
+            rateLimitRpm: null,
+            remainingRateLimitRequests: null,
+            usageRecorded: false,
+            plan: {
+                id: 'plan-1',
+                name: 'Starter',
+                quotaRequests: 1000,
+                rateLimitRpm: null,
             },
             product: {
                 id: 'prod-1',
@@ -341,9 +512,15 @@ describe('UsageService', () => {
 
     it('creates usage record on success', async () => {
         const occurredAt = '2026-01-25T10:00:00.000Z';
+        const periodStart = new Date('2026-01-01T00:00:00.000Z');
+        const periodEnd = new Date('2026-02-01T00:00:00.000Z');
+
         prisma.subscription.findUnique.mockResolvedValue({
             id: 'sub-1',
             status: SubscriptionStatus.ACTIVE,
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            gracePeriodEndsAt: null,
         });
         prisma.usageRecord.create.mockResolvedValue({});
 
@@ -369,18 +546,25 @@ describe('UsageService', () => {
     });
 
     it('summarizes usage for active subscriptions', async () => {
-        const periodStart = new Date('2026-01-01T00:00:00.000Z');
-        const periodEnd = new Date('2026-02-01T00:00:00.000Z');
+        jest.useFakeTimers().setSystemTime(
+            new Date('2026-03-15T12:00:00.000Z'),
+        );
+
+        const periodStart = new Date('2026-03-01T00:00:00.000Z');
+        const periodEnd = new Date('2026-04-01T00:00:00.000Z');
 
         prisma.subscription.findMany.mockResolvedValue([
             {
                 id: 'sub-1',
+                status: SubscriptionStatus.ACTIVE,
                 currentPeriodStart: periodStart,
                 currentPeriodEnd: periodEnd,
+                gracePeriodEndsAt: null,
                 plan: {
                     id: 'plan-1',
                     name: 'Starter',
                     quotaRequests: 1000,
+                    rateLimitRpm: 120,
                     product: {
                         id: 'prod-1',
                         title: 'Payments API',
@@ -389,12 +573,15 @@ describe('UsageService', () => {
             },
             {
                 id: 'sub-2',
+                status: SubscriptionStatus.ACTIVE,
                 currentPeriodStart: null,
                 currentPeriodEnd: null,
+                gracePeriodEndsAt: null,
                 plan: {
                     id: 'plan-2',
                     name: 'Pro',
                     quotaRequests: 2000,
+                    rateLimitRpm: null,
                     product: {
                         id: 'prod-2',
                         title: 'Search API',
@@ -417,34 +604,118 @@ describe('UsageService', () => {
             role: Role.BUYER,
         };
 
-        const result = await service.getSummary(user);
+        try {
+            const result = await service.getSummary(user);
 
-        expect(prisma.subscription.findMany).toHaveBeenCalledWith(
-            expect.objectContaining({
-                where: {
-                    userId: 'user-1',
+            expect(prisma.subscription.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    where: {
+                        userId: 'user-1',
+                        status: {
+                            in: [
+                                SubscriptionStatus.ACTIVE,
+                                SubscriptionStatus.PAST_DUE,
+                            ],
+                        },
+                    },
+                }),
+            );
+            expect(result.items).toEqual([
+                {
+                    subscriptionId: 'sub-1',
                     status: SubscriptionStatus.ACTIVE,
+                    periodStart,
+                    periodEnd,
+                    gracePeriodEndsAt: null,
+                    usedRequests: 120,
+                    quotaRequests: 1000,
+                    percent: 12,
+                    plan: {
+                        id: 'plan-1',
+                        name: 'Starter',
+                        quotaRequests: 1000,
+                        rateLimitRpm: 120,
+                    },
+                    product: {
+                        id: 'prod-1',
+                        title: 'Payments API',
+                    },
                 },
-            }),
+            ]);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it('summarizes past due subscriptions while grace period is active', async () => {
+        jest.useFakeTimers().setSystemTime(
+            new Date('2026-03-15T12:00:00.000Z'),
         );
-        expect(result.items).toEqual([
+
+        const periodStart = new Date('2026-03-01T00:00:00.000Z');
+        const gracePeriodEndsAt = new Date('2026-03-18T00:00:00.000Z');
+
+        prisma.subscription.findMany.mockResolvedValue([
             {
-                subscriptionId: 'sub-1',
-                periodStart,
-                periodEnd,
-                usedRequests: 120,
-                quotaRequests: 1000,
-                percent: 12,
+                id: 'sub-1',
+                status: SubscriptionStatus.PAST_DUE,
+                currentPeriodStart: periodStart,
+                currentPeriodEnd: new Date('2026-04-01T00:00:00.000Z'),
+                gracePeriodEndsAt,
                 plan: {
                     id: 'plan-1',
                     name: 'Starter',
                     quotaRequests: 1000,
-                },
-                product: {
-                    id: 'prod-1',
-                    title: 'Payments API',
+                    rateLimitRpm: 120,
+                    product: {
+                        id: 'prod-1',
+                        title: 'Payments API',
+                    },
                 },
             },
         ]);
+        prisma.usageRecord.groupBy.mockResolvedValue([
+            {
+                subscriptionId: 'sub-1',
+                _sum: {
+                    requestCount: 320,
+                },
+            },
+        ]);
+
+        const user = {
+            id: 'user-1',
+            email: 'user@example.com',
+            role: Role.BUYER,
+        };
+
+        try {
+            const result = await service.getSummary(user);
+
+            expect(result.items).toEqual([
+                {
+                    subscriptionId: 'sub-1',
+                    status: SubscriptionStatus.PAST_DUE,
+                    periodStart,
+                    periodEnd: gracePeriodEndsAt,
+                    gracePeriodEndsAt,
+                    usedRequests: 320,
+                    quotaRequests: 1000,
+                    percent: 32,
+                    plan: {
+                        id: 'plan-1',
+                        name: 'Starter',
+                        quotaRequests: 1000,
+                        rateLimitRpm: 120,
+                    },
+                    product: {
+                        id: 'prod-1',
+                        title: 'Payments API',
+                    },
+                },
+            ]);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 });

@@ -4,6 +4,7 @@ export const usageAuthorizationReasons = [
     'INVALID_API_KEY',
     'NO_ACTIVE_SUBSCRIPTION',
     'QUOTA_EXCEEDED',
+    'RATE_LIMIT_EXCEEDED',
 ] as const;
 
 export type UsageAuthorizationReason =
@@ -18,6 +19,9 @@ export class UsageAuthorizationPlanDto {
 
     @ApiProperty({ example: 1000 })
     quotaRequests!: number;
+
+    @ApiProperty({ example: 120, nullable: true })
+    rateLimitRpm!: number | null;
 }
 
 export class UsageAuthorizationProductDto {
@@ -61,6 +65,12 @@ export class AuthorizeUsageResponseDto {
 
     @ApiPropertyOptional({ example: 879 })
     remainingRequests?: number;
+
+    @ApiPropertyOptional({ example: 120, nullable: true })
+    rateLimitRpm?: number | null;
+
+    @ApiPropertyOptional({ example: 52, nullable: true })
+    remainingRateLimitRequests?: number | null;
 
     @ApiPropertyOptional({ example: false })
     usageRecorded?: boolean;
