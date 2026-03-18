@@ -4,6 +4,8 @@ import { JwtGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { OptionalJwtGuard } from '../catalog/guards/optional-jwt.guard';
+import { UsageModule } from '../usage/usage.module';
+import { BillingAlertsService } from './billing-alerts.service';
 import { MockPaymentGuard } from './guards/mock-payment.guard';
 import { MockPaymentProvider } from './payment/mock-payment.provider';
 import { PAYMENT_PROVIDER } from './payment/payment.provider';
@@ -19,7 +21,7 @@ import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionsService } from './subscriptions.service';
 
 @Module({
-    imports: [PrismaModule],
+    imports: [PrismaModule, UsageModule],
     controllers: [
         PlansController,
         SubscriptionsController,
@@ -34,6 +36,7 @@ import { SubscriptionsService } from './subscriptions.service';
         OptionalJwtGuard,
         MockPaymentGuard,
         MockPaymentProvider,
+        BillingAlertsService,
         StripeClientService,
         StripePaymentProvider,
         BillingReconciliationService,

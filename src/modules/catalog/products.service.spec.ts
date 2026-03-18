@@ -11,6 +11,9 @@ type PrismaMock = {
         create: jest.Mock;
         update: jest.Mock;
     };
+    productView: {
+        create: jest.Mock;
+    };
 };
 
 describe('ProductsService', () => {
@@ -25,6 +28,9 @@ describe('ProductsService', () => {
                 findUnique: jest.fn(),
                 create: jest.fn(),
                 update: jest.fn(),
+            },
+            productView: {
+                create: jest.fn(),
             },
         };
 
@@ -91,5 +97,28 @@ describe('ProductsService', () => {
                 code: ErrorCodes.PRODUCT_NOT_PUBLIC,
             },
         );
+    });
+
+    it('records a public view when published product is fetched', async () => {
+        prisma.apiProduct.findUnique.mockResolvedValue({
+            id: 'product-1',
+            ownerId: 'owner-1',
+            title: 'Title',
+            description: 'Long enough description',
+            category: 'payments',
+            tags: [],
+            status: ProductStatus.PUBLISHED,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        });
+
+        await service.getProductById('product-1');
+
+        expect(prisma.productView.create).toHaveBeenCalledWith({
+            data: {
+                productId: 'product-1',
+                viewerUserId: null,
+            },
+        });
     });
 });

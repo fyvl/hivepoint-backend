@@ -1,20 +1,27 @@
 # Release Notes
 
-## MVP features implemented
+## Current stage
+HivePoint backend is currently at the `Beta` stage.
+
+## Beta features implemented
 - Authentication: register, login, refresh, logout with JWT access tokens and refresh cookies.
 - Users: current user profile via `/users/me`.
 - Catalog: API products and versions with status-based visibility.
-- Billing: plans, subscriptions, invoices, mock payment endpoints, Stripe Checkout, webhook sync, and Stripe customer portal.
+- Billing: plans, subscriptions, invoices, mock payment endpoints, Stripe Checkout, webhook sync, Stripe customer portal, renewal state sync, `past_due`, grace period, and retry metadata.
 - Gateway: dispatch and proxy endpoints for live upstream calls with API key/subscription validation and usage recording.
 - API keys: create, list, revoke; raw key returned only at creation.
-- Usage metering: authorize raw API keys against active subscriptions and quota, ingest usage records, and summarize usage per active subscription.
+- Usage metering: authorize raw API keys against active subscriptions, quota, and optional per-plan RPM policy; ingest usage records and summarize usage per active subscription.
+- Seller analytics: product view tracking plus seller analytics overview with conversion, active clients, failed billing events, and top endpoints.
+- Buyer alerts: quota, renewal, payment retry / past due, and new-version alerts via `/billing/alerts`.
 - OpenAPI/Swagger: `/api` and `/openapi.json`.
 
-## Known limitations
+## Known limitations before production
 - Gateway rate limiting is limited to an optional per-plan RPM policy; there is no richer burst/dynamic policy layer yet.
+- Quota handling is a hard-cap beta model; flexible overage/pay-per-use billing is not implemented yet.
 - Stripe retry cadence and dunning rules are provider-driven; the app surfaces retry state and reconciliation results but does not define custom retry policies.
 - Usage aggregation is synchronous, not event-driven.
 - Role changes are done via database updates (no admin UI).
+- Seller analytics are read-model metrics, not a full observability or BI stack.
 - Gateway proxy currently supports JSON/text request and response bodies; it is not a full streaming/binary reverse proxy yet.
 
 ## How to run

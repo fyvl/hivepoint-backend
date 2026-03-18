@@ -17,18 +17,23 @@ import { ZodValidationPipe } from '../../common/utils/zod-validation.pipe';
 import { subscribeSchema } from './billing.schemas';
 import type { SubscribeInput } from './billing.schemas';
 import { CancelSubscriptionResponseDto } from './dto/cancel-subscription-response.dto';
+import { BillingAlertsResponseDto } from './dto/billing-alert.dto';
 import { BillingPortalSessionResponseDto } from './dto/billing-portal-session-response.dto';
 import { BillingConfigResponseDto } from './dto/billing-config-response.dto';
 import { CheckoutStatusDto } from './dto/checkout-status.dto';
 import { SubscriptionListResponseDto } from './dto/list-subscriptions.dto';
 import { SubscribeDto } from './dto/subscribe.dto';
 import { SubscribeResponseDto } from './dto/subscribe-response.dto';
+import { BillingAlertsService } from './billing-alerts.service';
 import { SubscriptionsService } from './subscriptions.service';
 
 @ApiTags('billing')
 @Controller('billing')
 export class SubscriptionsController {
-    constructor(private readonly subscriptionsService: SubscriptionsService) {}
+    constructor(
+        private readonly subscriptionsService: SubscriptionsService,
+        private readonly billingAlertsService: BillingAlertsService,
+    ) {}
 
     @Get('subscriptions')
     @UseGuards(JwtGuard)
@@ -40,6 +45,18 @@ export class SubscriptionsController {
         @User() user: AuthenticatedUser,
     ): Promise<SubscriptionListResponseDto> {
         return this.subscriptionsService.listUserSubscriptions(user);
+    }
+
+    @Get('alerts')
+    @UseGuards(JwtGuard)
+    @ApiBearerAuth('bearer')
+    @ApiOperation({ summary: 'List buyer billing and quota alerts' })
+    @ApiOkResponse({ type: BillingAlertsResponseDto })
+    @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
+    async listAlerts(
+        @User() user: AuthenticatedUser,
+    ): Promise<BillingAlertsResponseDto> {
+        return this.billingAlertsService.listAlerts(user);
     }
 
     @Get('config')

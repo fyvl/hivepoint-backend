@@ -29,7 +29,7 @@
 
 ## Status
 
-MVP backend is implemented and running locally. CI runs lint, unit tests, and e2e tests on push and pull requests.
+Beta backend is implemented and running locally. It includes Stripe-backed renewals, gateway/quota enforcement, seller analytics, and buyer alerts. CI runs lint, unit tests, and e2e tests on push and pull requests.
 
 ## Project setup
 
@@ -47,7 +47,7 @@ See `docs/runbook.md` for local environment setup, Prisma migrations, and smoke 
 - `docs/project-overview.md` - project overview and architecture notes
 - `docs/diagrams.md` - Mermaid flow diagrams
 - `docs/testing.md` - test database and commands
-- `docs/release-notes.md` - MVP scope and known limitations
+- `docs/release-notes.md` - Beta scope and known limitations
 
 ## Compile and run the project
 

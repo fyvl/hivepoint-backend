@@ -11,7 +11,7 @@ export const createTestApp = async (): Promise<INestApplication> => {
         imports: [AppModule],
     }).compile();
 
-    const app = moduleFixture.createNestApplication();
+    const app = moduleFixture.createNestApplication({ rawBody: true });
     app.use(cookieParser());
     app.useGlobalFilters(new HttpExceptionFilter());
 

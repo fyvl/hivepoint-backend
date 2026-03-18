@@ -5,8 +5,15 @@ import {
     type Server,
 } from 'node:http';
 import { INestApplication } from '@nestjs/common';
-import { PrismaClient, Role, SubscriptionStatus } from '@prisma/client';
+import {
+    BillingProvider,
+    InvoiceStatus,
+    PrismaClient,
+    Role,
+    SubscriptionStatus,
+} from '@prisma/client';
 import request from 'supertest';
+import { StripeClientService } from '../src/modules/billing/payment/stripe-client.service';
 import { createTestApp } from './helpers/test-app';
 import { resetDb } from './helpers/db';
 
@@ -31,6 +38,10 @@ describe('E2E flows', () => {
     let prisma: PrismaClient;
     let sellerApiServer: Server;
     let sellerApiBaseUrl: string;
+    let stripeClientService: StripeClientService;
+    let constructStripeWebhookEventSpy: jest.SpiedFunction<
+        StripeClientService['constructWebhookEvent']
+    >;
 
     beforeAll(async () => {
         sellerApiServer = createServer((req, res) => {
@@ -102,10 +113,16 @@ describe('E2E flows', () => {
 
         app = await createTestApp();
         prisma = new PrismaClient();
+        stripeClientService = app.get(StripeClientService);
+        constructStripeWebhookEventSpy = jest.spyOn(
+            stripeClientService,
+            'constructWebhookEvent',
+        );
     });
 
     beforeEach(async () => {
         await resetDb(prisma);
+        constructStripeWebhookEventSpy.mockReset();
     });
 
     afterAll(async () => {
@@ -122,6 +139,26 @@ describe('E2E flows', () => {
         });
         await prisma.$disconnect();
     });
+
+    const postStripeWebhook = async (event: {
+        type: string;
+        data: {
+            object: unknown;
+        };
+    }) => {
+        constructStripeWebhookEventSpy.mockReturnValueOnce(event as never);
+
+        await request(app.getHttpServer())
+            .post('/billing/stripe/webhook')
+            .set('stripe-signature', 'test-signature')
+            .set('content-type', 'application/json')
+            .send({
+                id: `evt_${Date.now()}`,
+                type: event.type,
+            })
+            .expect(201)
+            .expect({ received: true });
+    };
 
     const registerUser = async (
         email: string,
@@ -722,6 +759,290 @@ describe('E2E flows', () => {
                 subscriptionId,
                 usedRequests: 1,
                 quotaRequests: expect.any(Number),
+            }),
+        );
+    });
+
+    it('tracks product views, exposes seller analytics, and returns buyer alerts', async () => {
+        const { sellerToken, product, plan } = await createSellerAndPlan();
+
+        await request(app.getHttpServer())
+            .get(`/catalog/products/${product.id}`)
+            .expect(200);
+
+        const buyerEmail = uniqueEmail('buyer');
+        await registerUser(buyerEmail);
+        const { accessToken: buyerToken } = await loginUser(buyerEmail);
+
+        await request(app.getHttpServer())
+            .get(`/catalog/products/${product.id}`)
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .expect(200);
+
+        const subscribeResponse = await request(app.getHttpServer())
+            .post('/billing/subscribe')
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .send({ planId: plan.id })
+            .expect(201);
+
+        const { subscriptionId, invoiceId } = subscribeResponse.body as {
+            subscriptionId: string;
+            invoiceId: string;
+        };
+
+        await request(app.getHttpServer())
+            .post(`/billing/mock/succeed?invoiceId=${invoiceId}`)
+            .set('x-mock-payment-secret', getEnv('MOCK_PAYMENT_SECRET'))
+            .expect(201)
+            .expect({ ok: true });
+
+        await request(app.getHttpServer())
+            .post('/usage/record')
+            .set('x-usage-secret', getEnv('USAGE_INGEST_SECRET'))
+            .send({
+                subscriptionId,
+                endpoint: '/v1/search',
+                requestCount: 850,
+            })
+            .expect(201)
+            .expect({ ok: true });
+
+        const versionTwoResponse = await request(app.getHttpServer())
+            .post(`/catalog/products/${product.id}/versions`)
+            .set('Authorization', `Bearer ${sellerToken}`)
+            .send({
+                version: 'v2',
+                openApiUrl: `${sellerApiBaseUrl}/openapi.json`,
+            })
+            .expect(201);
+
+        await request(app.getHttpServer())
+            .patch(`/catalog/versions/${versionTwoResponse.body.id}`)
+            .set('Authorization', `Bearer ${sellerToken}`)
+            .send({
+                status: 'PUBLISHED',
+            })
+            .expect(200);
+
+        const analyticsResponse = await request(app.getHttpServer())
+            .get('/seller/analytics/overview')
+            .set('Authorization', `Bearer ${sellerToken}`)
+            .expect(200);
+
+        expect(analyticsResponse.body.totals).toEqual(
+            expect.objectContaining({
+                productCount: 1,
+                publishedProductCount: 1,
+                views30d: 2,
+                subscriptions30d: 1,
+                activeClients: 1,
+                requests30d: 850,
+            }),
+        );
+        expect(analyticsResponse.body.products).toHaveLength(1);
+        expect(analyticsResponse.body.products[0]).toEqual(
+            expect.objectContaining({
+                productId: product.id,
+                views30d: 2,
+                subscriptions30d: 1,
+                conversionRate30d: 50,
+                requests30d: 850,
+                latestPublishedVersion: expect.objectContaining({
+                    version: 'v2',
+                }),
+                topEndpoints: [
+                    {
+                        endpoint: '/v1/search',
+                        requestCount: 850,
+                    },
+                ],
+            }),
+        );
+
+        const alertsResponse = await request(app.getHttpServer())
+            .get('/billing/alerts')
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .expect(200);
+
+        expect(alertsResponse.body.items).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({
+                    kind: 'QUOTA_NEAR_LIMIT',
+                    subscriptionId,
+                    productId: product.id,
+                }),
+                expect.objectContaining({
+                    kind: 'NEW_VERSION_AVAILABLE',
+                    subscriptionId,
+                    productId: product.id,
+                }),
+            ]),
+        );
+    });
+
+    it('stripe renewal failure stays past due when stale draft events arrive later', async () => {
+        const { plan } = await createSellerAndPlan();
+
+        const buyerEmail = uniqueEmail('buyer');
+        await registerUser(buyerEmail);
+        const { accessToken: buyerToken } = await loginUser(buyerEmail);
+
+        const subscribeResponse = await request(app.getHttpServer())
+            .post('/billing/subscribe')
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .send({ planId: plan.id })
+            .expect(201);
+
+        const { subscriptionId, invoiceId } = subscribeResponse.body as {
+            subscriptionId: string;
+            invoiceId: string;
+        };
+
+        await request(app.getHttpServer())
+            .post(`/billing/mock/succeed?invoiceId=${invoiceId}`)
+            .set('x-mock-payment-secret', getEnv('MOCK_PAYMENT_SECRET'))
+            .expect(201)
+            .expect({ ok: true });
+
+        const periodStart = new Date();
+        periodStart.setUTCDate(periodStart.getUTCDate() - 5);
+        periodStart.setUTCMilliseconds(0);
+        const periodEnd = new Date();
+        periodEnd.setUTCDate(periodEnd.getUTCDate() + 5);
+        periodEnd.setUTCMilliseconds(0);
+        const nextPaymentAttemptAt = new Date();
+        nextPaymentAttemptAt.setUTCDate(nextPaymentAttemptAt.getUTCDate() + 1);
+        nextPaymentAttemptAt.setUTCMilliseconds(0);
+        const gracePeriodEndsAt = new Date(periodEnd);
+        gracePeriodEndsAt.setUTCDate(gracePeriodEndsAt.getUTCDate() + 3);
+        const stripeSubscriptionId = 'sub_stripe_renewal_1';
+        const stripeInvoiceId = 'in_cycle_renewal_1';
+
+        await prisma.subscription.update({
+            where: { id: subscriptionId },
+            data: {
+                paymentProvider: BillingProvider.STRIPE,
+                externalSubscriptionId: stripeSubscriptionId,
+                currentPeriodStart: periodStart,
+                currentPeriodEnd: periodEnd,
+            },
+        });
+
+        const recurringInvoice = {
+            id: stripeInvoiceId,
+            billing_reason: 'subscription_cycle',
+            total: 1000,
+            currency: 'eur',
+            attempt_count: 2,
+            next_payment_attempt: Math.floor(
+                nextPaymentAttemptAt.getTime() / 1000,
+            ),
+            period_start: Math.floor(periodStart.getTime() / 1000),
+            period_end: Math.floor(periodEnd.getTime() / 1000),
+            parent: {
+                subscription_details: {
+                    metadata: {},
+                    subscription: stripeSubscriptionId,
+                },
+            },
+        };
+
+        await postStripeWebhook({
+            type: 'invoice.payment_failed',
+            data: {
+                object: recurringInvoice,
+            },
+        });
+
+        const afterFailureResponse = await request(app.getHttpServer())
+            .get('/billing/subscriptions')
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .expect(200);
+
+        expect(afterFailureResponse.body.items).toHaveLength(1);
+        expect(afterFailureResponse.body.items[0]).toEqual(
+            expect.objectContaining({
+                id: subscriptionId,
+                status: SubscriptionStatus.PAST_DUE,
+                paymentProvider: BillingProvider.STRIPE,
+                gracePeriodEndsAt: gracePeriodEndsAt.toISOString(),
+                latestInvoice: expect.objectContaining({
+                    status: InvoiceStatus.PAST_DUE,
+                    amountCents: 1000,
+                    currency: 'EUR',
+                    attemptCount: 2,
+                    nextPaymentAttemptAt: nextPaymentAttemptAt.toISOString(),
+                }),
+            }),
+        );
+
+        await postStripeWebhook({
+            type: 'invoice.created',
+            data: {
+                object: {
+                    ...recurringInvoice,
+                    attempt_count: 0,
+                    next_payment_attempt: null,
+                },
+            },
+        });
+
+        await postStripeWebhook({
+            type: 'invoice.finalized',
+            data: {
+                object: {
+                    ...recurringInvoice,
+                    attempt_count: 0,
+                    next_payment_attempt: null,
+                },
+            },
+        });
+
+        const afterDraftReplayResponse = await request(app.getHttpServer())
+            .get('/billing/subscriptions')
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .expect(200);
+
+        expect(afterDraftReplayResponse.body.items).toHaveLength(1);
+        expect(afterDraftReplayResponse.body.items[0]).toEqual(
+            expect.objectContaining({
+                id: subscriptionId,
+                status: SubscriptionStatus.PAST_DUE,
+                gracePeriodEndsAt: gracePeriodEndsAt.toISOString(),
+                latestInvoice: expect.objectContaining({
+                    status: InvoiceStatus.PAST_DUE,
+                    attemptCount: 2,
+                    nextPaymentAttemptAt: nextPaymentAttemptAt.toISOString(),
+                }),
+            }),
+        );
+
+        const persistedRenewalInvoice = await prisma.invoice.findUnique({
+            where: { externalInvoiceId: stripeInvoiceId },
+            select: {
+                status: true,
+                attemptCount: true,
+                nextPaymentAttemptAt: true,
+            },
+        });
+
+        expect(persistedRenewalInvoice).toEqual({
+            status: InvoiceStatus.PAST_DUE,
+            attemptCount: 2,
+            nextPaymentAttemptAt,
+        });
+
+        const usageSummaryResponse = await request(app.getHttpServer())
+            .get('/usage/summary')
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .expect(200);
+
+        expect(usageSummaryResponse.body.items).toHaveLength(1);
+        expect(usageSummaryResponse.body.items[0]).toEqual(
+            expect.objectContaining({
+                subscriptionId,
+                status: SubscriptionStatus.PAST_DUE,
+                gracePeriodEndsAt: gracePeriodEndsAt.toISOString(),
             }),
         );
     });

@@ -148,6 +148,8 @@ export class ProductsService {
             }
         }
 
+        await this.recordProductView(product, user);
+
         return product;
     }
 
@@ -275,5 +277,25 @@ export class ProductsService {
         }
 
         return false;
+    }
+
+    private async recordProductView(
+        product: { id: string; ownerId: string; status: ProductStatus },
+        user?: AuthenticatedUser,
+    ): Promise<void> {
+        if (product.status !== ProductStatus.PUBLISHED) {
+            return;
+        }
+
+        if (user && this.isOwnerOrAdmin(product, user)) {
+            return;
+        }
+
+        await this.prisma.productView.create({
+            data: {
+                productId: product.id,
+                viewerUserId: user?.id ?? null,
+            },
+        });
     }
 }

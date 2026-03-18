@@ -62,6 +62,7 @@ model User {
     products         ApiProduct[]
     subscriptions    Subscription[]
     apiKeys          ApiKey[]
+    productViews     ProductView[]
 }
 
 model RefreshToken {
@@ -88,6 +89,7 @@ model ApiProduct {
     owner       User          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
     versions    ApiVersion[]
     plans       Plan[]
+    productViews ProductView[]
 
     @@index([ownerId])
 }
@@ -197,4 +199,16 @@ model UsageRecord {
     subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
     @@index([subscriptionId, occurredAt])
+}
+
+model ProductView {
+    id           String     @id @default(uuid())
+    productId    String
+    viewerUserId String?
+    viewedAt     DateTime   @default(now())
+    product      ApiProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+    viewerUser   User?      @relation(fields: [viewerUserId], references: [id], onDelete: SetNull)
+
+    @@index([productId, viewedAt])
+    @@index([viewerUserId, viewedAt])
 }
