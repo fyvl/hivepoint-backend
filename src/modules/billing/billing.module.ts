@@ -6,6 +6,7 @@ import { PrismaModule } from '../../common/prisma/prisma.module';
 import { OptionalJwtGuard } from '../catalog/guards/optional-jwt.guard';
 import { UsageModule } from '../usage/usage.module';
 import { BillingAlertsService } from './billing-alerts.service';
+import { BillingManagedRetryService } from './billing-managed-retry.service';
 import { MockPaymentGuard } from './guards/mock-payment.guard';
 import { MockPaymentProvider } from './payment/mock-payment.provider';
 import { PAYMENT_PROVIDER } from './payment/payment.provider';
@@ -37,6 +38,7 @@ import { SubscriptionsService } from './subscriptions.service';
         MockPaymentGuard,
         MockPaymentProvider,
         BillingAlertsService,
+        BillingManagedRetryService,
         StripeClientService,
         StripePaymentProvider,
         BillingReconciliationService,

@@ -5,10 +5,15 @@ type PrismaMock = {
     usageRecord: {
         create: jest.Mock;
         aggregate: jest.Mock;
+        groupBy: jest.Mock;
     };
     usageDailyAggregate: {
         upsert: jest.Mock;
         aggregate: jest.Mock;
+    };
+    usageEndpointDailyAggregate: {
+        upsert: jest.Mock;
+        groupBy: jest.Mock;
     };
     $transaction: jest.Mock;
 };
@@ -22,15 +27,22 @@ describe('UsageAggregationService', () => {
             usageRecord: {
                 create: jest.fn(),
                 aggregate: jest.fn(),
+                groupBy: jest.fn(),
             },
             usageDailyAggregate: {
                 upsert: jest.fn(),
                 aggregate: jest.fn(),
             },
+            usageEndpointDailyAggregate: {
+                upsert: jest.fn(),
+                groupBy: jest.fn(),
+            },
             $transaction: jest.fn(async (callback) =>
                 callback({
                     usageRecord: prisma.usageRecord,
                     usageDailyAggregate: prisma.usageDailyAggregate,
+                    usageEndpointDailyAggregate:
+                        prisma.usageEndpointDailyAggregate,
                 }),
             ),
         };
@@ -71,6 +83,26 @@ describe('UsageAggregationService', () => {
             create: {
                 subscriptionId: 'sub-1',
                 bucketDate: new Date('2026-03-19T00:00:00.000Z'),
+                requestCount: 2,
+            },
+            update: {
+                requestCount: {
+                    increment: 2,
+                },
+            },
+        });
+        expect(prisma.usageEndpointDailyAggregate.upsert).toHaveBeenCalledWith({
+            where: {
+                subscriptionId_bucketDate_endpoint: {
+                    subscriptionId: 'sub-1',
+                    bucketDate: new Date('2026-03-19T00:00:00.000Z'),
+                    endpoint: '/v1/search',
+                },
+            },
+            create: {
+                subscriptionId: 'sub-1',
+                bucketDate: new Date('2026-03-19T00:00:00.000Z'),
+                endpoint: '/v1/search',
                 requestCount: 2,
             },
             update: {
@@ -154,5 +186,83 @@ describe('UsageAggregationService', () => {
         expect(prisma.usageDailyAggregate.aggregate).not.toHaveBeenCalled();
         expect(prisma.usageRecord.aggregate).toHaveBeenCalledTimes(1);
         expect(result).toBe(9);
+    });
+
+    it('returns a per-endpoint breakdown from aggregate and raw sources', async () => {
+        prisma.usageRecord.groupBy
+            .mockResolvedValueOnce([
+                {
+                    endpoint: '/v1/search',
+                    _sum: {
+                        requestCount: 5,
+                    },
+                },
+            ])
+            .mockResolvedValueOnce([
+                {
+                    endpoint: '/v1/search',
+                    _sum: {
+                        requestCount: 7,
+                    },
+                },
+                {
+                    endpoint: '/v1/health',
+                    _sum: {
+                        requestCount: 2,
+                    },
+                },
+            ])
+            .mockResolvedValueOnce([
+                {
+                    endpoint: '/v1/search',
+                    _sum: {
+                        requestCount: 3,
+                    },
+                },
+            ]);
+        prisma.usageEndpointDailyAggregate.groupBy.mockResolvedValue([
+            {
+                endpoint: '/v1/search',
+                _sum: {
+                    requestCount: 40,
+                },
+            },
+            {
+                endpoint: '/v1/health',
+                _sum: {
+                    requestCount: 10,
+                },
+            },
+        ]);
+
+        const result = await service.listEndpointUsageForWindow({
+            subscriptionId: 'sub-1',
+            periodStart: new Date('2026-03-01T10:00:00.000Z'),
+            periodEnd: new Date('2026-03-04T06:00:00.000Z'),
+        });
+
+        expect(prisma.usageEndpointDailyAggregate.groupBy).toHaveBeenCalledWith({
+            by: ['endpoint'],
+            where: {
+                subscriptionId: 'sub-1',
+                bucketDate: {
+                    gte: new Date('2026-03-02T00:00:00.000Z'),
+                    lt: new Date('2026-03-04T00:00:00.000Z'),
+                },
+            },
+            _sum: {
+                requestCount: true,
+            },
+        });
+        expect(result).toEqual([
+            {
+                endpoint: '/v1/search',
+                requestCount: 55,
+            },
+            {
+                endpoint: '/v1/health',
+                requestCount: 12,
+            },
+        ]);
     });
 });

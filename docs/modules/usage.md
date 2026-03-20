@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Provides a minimal entitlement layer for API access: it can authorize a raw API key against an active subscription and quota for a specific product, apply optional overage policy for plans that allow it, accept usage ingest events, and summarize usage for the current billing period.
+Provides a minimal entitlement layer for API access: it can authorize a raw API key against an active subscription and quota for a specific product, apply optional overage policy for plans that allow it, accept usage ingest events, and summarize usage for the current billing period including top endpoint breakdowns.
 
 ## Endpoints
 
@@ -22,11 +22,12 @@ Provides a minimal entitlement layer for API access: it can authorize a raw API 
 - `/usage/authorize` hashes the incoming raw API key with `API_KEY_SALT`, resolves the owning user, finds an `ACTIVE` subscription for the requested product, and checks the current billing period quota or overage policy.
 - Authorization returns `allowed=false` for `INVALID_API_KEY`, `NO_ACTIVE_SUBSCRIPTION`, `QUOTA_EXCEEDED`, or `RATE_LIMIT_EXCEEDED`.
 - If `consume=true`, `/usage/authorize` records usage immediately after a successful check.
-- `/usage/record` validates the subscription window before accepting the event, then either writes directly to `UsageRecord` plus `UsageDailyAggregate`, or enqueues a `UsageIngestJob` depending on `USAGE_INGEST_QUEUE_ENABLED`.
+- `/usage/record` validates the subscription window before accepting the event, then either writes directly to `UsageRecord` plus `UsageDailyAggregate` and `UsageEndpointDailyAggregate`, or enqueues a `UsageIngestJob` depending on `USAGE_INGEST_QUEUE_ENABLED`.
 - Only `ACTIVE` subscriptions for the current user are considered.
 - Billing period is taken from `subscription.currentPeriodStart` and `subscription.currentPeriodEnd`.
 - If either period value is `null`, that subscription is omitted from the summary.
 - `usedRequests` is resolved through a hybrid read-model: `UsageDailyAggregate` is used for full UTC days inside the window, while boundary partial days still read directly from `UsageRecord`.
+- `topEndpoints` is resolved through the same hybrid windowing logic, but uses `UsageEndpointDailyAggregate` for full UTC days and raw `UsageRecord` endpoint groups for boundary/pending slices.
 - `percent = min(100, floor((usedRequests / quotaRequests) * 100))`.
 - When the plan has `allowOverage=true`, quota overrun is allowed and the response exposes `overageRequests` / `projectedOverageAmountCents` instead of hard-blocking the request.
 - Optional query filters (`subscriptionId`, `from`, `to`) are not implemented.
@@ -126,7 +127,17 @@ Response:
             "product": {
                 "id": "uuid",
                 "title": "Payments API"
-            }
+            },
+            "topEndpoints": [
+                {
+                    "endpoint": "/v1/search",
+                    "requestCount": 90
+                },
+                {
+                    "endpoint": "/v1/health",
+                    "requestCount": 30
+                }
+            ]
         }
     ]
 }
@@ -137,14 +148,14 @@ Response:
 - Ingestion validates the header secret inside the service before persisting or enqueueing a record.
 - Queue-backed ingestion stores `UsageIngestJob` rows and drains them via a background worker protected by a `BackgroundJobLease`.
 - Worker persistence into `UsageRecord` is idempotent via a unique `sourceJobId`.
-- Every persisted usage record also updates a subscription-level `UsageDailyAggregate` row for the UTC day bucket.
+- Every persisted usage record also updates a subscription-level `UsageDailyAggregate` row and a per-endpoint `UsageEndpointDailyAggregate` row for the UTC day bucket.
 - Authorization checks API key hash, subscription activity, billing period, quota, optional overage policy, and optional per-plan RPM in the usage service.
-- Quota and summary reads use `UsageDailyAggregate` for full-day spans and fall back to raw `UsageRecord` scans for partial-day boundaries and any yet-unaggregated rows.
+- Quota and summary total reads use `UsageDailyAggregate` for full-day spans and fall back to raw `UsageRecord` scans for partial-day boundaries and any yet-unaggregated rows.
+- Summary endpoint breakdown reads use `UsageEndpointDailyAggregate` for full-day spans and fall back to raw `UsageRecord` endpoint groups for partial-day boundaries and any yet-unaggregated rows.
 - Summary excludes subscriptions without a billing period in the database.
 
 ## Future improvements
 
-- Support date range filters and per-endpoint breakdowns.
-- Add per-endpoint aggregates and richer seller-facing usage breakdowns.
+- Support date range filters and richer seller-facing usage drill-downs.
 - Push rate-limit decisions onto a dedicated hot-path store instead of `UsageRecord` queries.
 

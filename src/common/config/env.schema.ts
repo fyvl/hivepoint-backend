@@ -26,6 +26,22 @@ const emptyToUndefined = (value: unknown): unknown => {
     return value;
 };
 
+const intArrayFromCsv = z.preprocess((value) => {
+    if (Array.isArray(value)) {
+        return value;
+    }
+
+    if (typeof value !== 'string') {
+        return value;
+    }
+
+    return value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+        .map((item) => Number.parseInt(item, 10));
+}, z.array(z.number().int().positive()).default([60, 360, 1440]));
+
 export const envSchema = z
     .object({
         PORT: z.coerce.number().int().positive().default(3000),
@@ -76,6 +92,18 @@ export const envSchema = z
             .int()
             .positive()
             .default(25),
+        BILLING_MANAGED_RETRY_ENABLED: booleanFromString.default(true),
+        BILLING_MANAGED_RETRY_INTERVAL_SECONDS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(60),
+        BILLING_MANAGED_RETRY_BATCH_SIZE: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(25),
+        BILLING_MANAGED_RETRY_DELAYS_MINUTES: intArrayFromCsv,
         API_KEY_SALT: z.string().min(1),
         USAGE_INGEST_SECRET: z.string().min(1),
         USAGE_INGEST_QUEUE_ENABLED: booleanFromString.default(true),

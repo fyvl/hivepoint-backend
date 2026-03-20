@@ -20,6 +20,10 @@ import { CheckoutStatusDto } from './dto/checkout-status.dto';
 import { SubscriptionListResponseDto } from './dto/list-subscriptions.dto';
 import { SubscribeResponseDto } from './dto/subscribe-response.dto';
 import { SubscriptionDto } from './dto/subscription.dto';
+import {
+    clearManagedRetryState,
+    createInitialManagedRetryState,
+} from './billing-managed-retry.policy';
 import { MockPaymentProvider } from './payment/mock-payment.provider';
 import { PAYMENT_PROVIDER } from './payment/payment.provider';
 import type {
@@ -95,6 +99,10 @@ export class SubscriptionsService {
                 currency: invoice.currency,
                 attemptCount: invoice.attemptCount,
                 nextPaymentAttemptAt: invoice.nextPaymentAttemptAt,
+                managedRetryCount: invoice.managedRetryCount,
+                managedNextRetryAt: invoice.managedNextRetryAt,
+                managedLastRetryAt: invoice.managedLastRetryAt,
+                managedRetryExhaustedAt: invoice.managedRetryExhaustedAt,
                 createdAt: invoice.createdAt,
             }));
 
@@ -625,6 +633,11 @@ export class SubscriptionsService {
                 externalCheckoutSessionId: true,
                 externalInvoiceId: true,
                 attemptCount: true,
+                managedRetryCount: true,
+                managedNextRetryAt: true,
+                managedLastRetryAt: true,
+                managedRetryExhaustedAt: true,
+                managedLastRetryError: true,
                 periodStart: true,
                 periodEnd: true,
                 subscription: {
@@ -668,6 +681,9 @@ export class SubscriptionsService {
                 attemptCount:
                     params.attemptCount ?? invoice.attemptCount ?? 0,
                 nextPaymentAttemptAt: null,
+                ...(this.hasManagedRetryState(invoice)
+                    ? clearManagedRetryState()
+                    : {}),
             },
         });
 
@@ -708,6 +724,11 @@ export class SubscriptionsService {
                 externalInvoiceId: true,
                 externalCheckoutSessionId: true,
                 attemptCount: true,
+                managedRetryCount: true,
+                managedNextRetryAt: true,
+                managedLastRetryAt: true,
+                managedRetryExhaustedAt: true,
+                managedLastRetryError: true,
                 subscription: {
                     select: {
                         id: true,
@@ -739,6 +760,19 @@ export class SubscriptionsService {
         }
 
         const invoiceStatus = params.invoiceStatus ?? InvoiceStatus.VOID;
+        const managedRetryState = this.resolveManagedRetryState({
+            paymentProvider: params.paymentProvider,
+            invoiceStatus,
+            currentInvoiceStatus: invoice.status,
+            currentPeriodStart: invoice.subscription.currentPeriodStart,
+            currentState: {
+                managedRetryCount: invoice.managedRetryCount,
+                managedNextRetryAt: invoice.managedNextRetryAt,
+                managedLastRetryAt: invoice.managedLastRetryAt,
+                managedRetryExhaustedAt: invoice.managedRetryExhaustedAt,
+                managedLastRetryError: invoice.managedLastRetryError,
+            },
+        });
 
         await this.prisma.invoice.update({
             where: { id: invoice.id },
@@ -761,6 +795,7 @@ export class SubscriptionsService {
                     invoiceStatus === InvoiceStatus.PAST_DUE
                         ? params.nextPaymentAttemptAt ?? null
                         : null,
+                ...(managedRetryState ?? {}),
             },
         });
 
@@ -911,6 +946,63 @@ export class SubscriptionsService {
         }
 
         return gracePeriodEndsAt;
+    }
+
+    private resolveManagedRetryState(params: {
+        paymentProvider: BillingProviderName;
+        invoiceStatus: InvoiceStatus;
+        currentInvoiceStatus: InvoiceStatus;
+        currentPeriodStart?: Date | null;
+        currentState: ReturnType<typeof clearManagedRetryState>;
+    }): ReturnType<typeof clearManagedRetryState> | null {
+        if (
+            !this.shouldUseManagedRenewalRetry({
+                paymentProvider: params.paymentProvider,
+                invoiceStatus: params.invoiceStatus,
+                currentPeriodStart: params.currentPeriodStart,
+            })
+        ) {
+            return this.hasManagedRetryState(params.currentState)
+                ? clearManagedRetryState()
+                : null;
+        }
+
+        if (
+            params.currentInvoiceStatus === InvoiceStatus.PAST_DUE &&
+            this.hasManagedRetryState(params.currentState)
+        ) {
+            return null;
+        }
+
+        return createInitialManagedRetryState(
+            new Date(),
+            this.configService.billingManagedRetryDelaysMinutes,
+        );
+    }
+
+    private shouldUseManagedRenewalRetry(params: {
+        paymentProvider: BillingProviderName;
+        invoiceStatus: InvoiceStatus;
+        currentPeriodStart?: Date | null;
+    }): boolean {
+        return (
+            this.configService.billingManagedRetryEnabled &&
+            params.paymentProvider === 'STRIPE' &&
+            params.invoiceStatus === InvoiceStatus.PAST_DUE &&
+            Boolean(params.currentPeriodStart)
+        );
+    }
+
+    private hasManagedRetryState(
+        invoice: Partial<ReturnType<typeof clearManagedRetryState>>,
+    ): boolean {
+        return Boolean(
+            (invoice.managedRetryCount ?? 0) > 0 ||
+                invoice.managedNextRetryAt ||
+                invoice.managedLastRetryAt ||
+                invoice.managedRetryExhaustedAt ||
+                invoice.managedLastRetryError,
+        );
     }
 
     private getInvoicePeriod(): { periodStart: Date; periodEnd: Date } {

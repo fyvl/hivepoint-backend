@@ -46,6 +46,10 @@ export class BillingAlertsService {
             const productTitle = subscription.product.title;
             const planName = subscription.plan.name;
             const latestInvoice = subscription.latestInvoice;
+            const effectiveRetryAt =
+                latestInvoice?.managedNextRetryAt ??
+                latestInvoice?.nextPaymentAttemptAt ??
+                null;
 
             if (subscription.status === 'PAST_DUE') {
                 alerts.push({
@@ -56,19 +60,22 @@ export class BillingAlertsService {
                     invoiceId: latestInvoice?.id ?? null,
                     versionId: null,
                     title: `Payment past due for ${productTitle}`,
-                    message: subscription.gracePeriodEndsAt
-                        ? `Renewal billing for ${planName} is past due. Access remains available through ${subscription.gracePeriodEndsAt.toISOString()}.`
-                        : `Renewal billing for ${planName} is past due and needs attention.`,
+                    message: this.buildPastDueMessage({
+                        planName,
+                        gracePeriodEndsAt: subscription.gracePeriodEndsAt,
+                        retryExhaustedAt:
+                            latestInvoice?.managedRetryExhaustedAt ?? null,
+                    }),
                     actionLabel: 'Open billing',
                     actionUrl: '/billing',
                     effectiveAt:
-                        latestInvoice?.nextPaymentAttemptAt ??
+                        effectiveRetryAt ??
                         subscription.gracePeriodEndsAt ??
                         subscription.updatedAt,
                 });
             }
 
-            if (latestInvoice?.nextPaymentAttemptAt) {
+            if (latestInvoice && effectiveRetryAt) {
                 alerts.push({
                     kind: BillingAlertKind.PAYMENT_RETRY_SCHEDULED,
                     severity: BillingAlertSeverity.WARNING,
@@ -77,10 +84,13 @@ export class BillingAlertsService {
                     invoiceId: latestInvoice.id,
                     versionId: null,
                     title: `Retry scheduled for ${productTitle}`,
-                    message: `Stripe will retry the ${planName} renewal on ${latestInvoice.nextPaymentAttemptAt.toISOString()}.`,
+                    message:
+                        latestInvoice?.managedNextRetryAt
+                            ? `Hivepoint will retry the ${planName} renewal on ${effectiveRetryAt.toISOString()}.`
+                            : `Stripe will retry the ${planName} renewal on ${effectiveRetryAt.toISOString()}.`,
                     actionLabel: 'Open billing',
                     actionUrl: '/billing',
-                    effectiveAt: latestInvoice.nextPaymentAttemptAt,
+                    effectiveAt: effectiveRetryAt,
                 });
             }
 
@@ -205,6 +215,22 @@ export class BillingAlertsService {
         });
 
         return { items: alerts };
+    }
+
+    private buildPastDueMessage(params: {
+        planName: string;
+        gracePeriodEndsAt: Date | null;
+        retryExhaustedAt: Date | null;
+    }): string {
+        if (params.retryExhaustedAt) {
+            return params.gracePeriodEndsAt
+                ? `Renewal billing for ${params.planName} is past due. Automatic retries are exhausted; access remains available through ${params.gracePeriodEndsAt.toISOString()}.`
+                : `Renewal billing for ${params.planName} is past due and automatic retries are exhausted.`;
+        }
+
+        return params.gracePeriodEndsAt
+            ? `Renewal billing for ${params.planName} is past due. Access remains available through ${params.gracePeriodEndsAt.toISOString()}.`
+            : `Renewal billing for ${params.planName} is past due and needs attention.`;
     }
 
     private async getLatestPublishedVersions(

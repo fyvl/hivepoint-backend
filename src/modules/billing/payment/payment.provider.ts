@@ -36,6 +36,22 @@ export type ScheduleSubscriptionCancelResult = {
     currentPeriodEnd?: Date | null;
 };
 
+export type RetryInvoicePaymentParams = {
+    externalInvoiceId: string;
+};
+
+export type RetryInvoicePaymentResult = {
+    externalInvoiceId: string;
+    externalSubscriptionId?: string;
+    amountCents: number;
+    currency: string;
+    periodStart: Date;
+    periodEnd: Date;
+    status: 'DRAFT' | 'PAID' | 'PAST_DUE' | 'VOID';
+    attemptCount?: number | null;
+    nextPaymentAttemptAt?: Date | null;
+};
+
 export interface PaymentProvider {
     readonly provider: BillingProviderName;
 
@@ -48,6 +64,10 @@ export interface PaymentProvider {
     scheduleSubscriptionCancelAtPeriodEnd(
         params: ScheduleSubscriptionCancelParams,
     ): Promise<ScheduleSubscriptionCancelResult>;
+
+    retryInvoicePayment(
+        params: RetryInvoicePaymentParams,
+    ): Promise<RetryInvoicePaymentResult>;
 }
 
 export const PAYMENT_PROVIDER = 'PAYMENT_PROVIDER';

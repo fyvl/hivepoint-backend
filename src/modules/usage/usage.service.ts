@@ -117,6 +117,15 @@ export class UsageService {
                           periodEnd: usageWindow.lt,
                       })
                     : 0;
+                const topEndpoints = usageWindow
+                    ? await this.usageAggregationService.listEndpointUsageForWindow(
+                          {
+                              subscriptionId: subscription.id,
+                              periodStart: usageWindow.gte,
+                              periodEnd: usageWindow.lt,
+                          },
+                      )
+                    : [];
                 const quotaRequests = subscription.plan.quotaRequests;
                 const percent =
                     quotaRequests > 0
@@ -145,6 +154,7 @@ export class UsageService {
                         id: subscription.plan.product.id,
                         title: subscription.plan.product.title,
                     },
+                    topEndpoints,
                 };
             }),
         );

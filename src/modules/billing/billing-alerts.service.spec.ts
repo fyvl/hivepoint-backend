@@ -76,6 +76,14 @@ describe('BillingAlertsService', () => {
                         amountCents: 1900,
                         currency: 'EUR',
                         attemptCount: 2,
+                        managedRetryCount: 1,
+                        managedNextRetryAt: new Date(
+                            '2026-03-20T00:00:00.000Z',
+                        ),
+                        managedLastRetryAt: new Date(
+                            '2026-03-19T00:00:00.000Z',
+                        ),
+                        managedRetryExhaustedAt: null,
                         nextPaymentAttemptAt: new Date(
                             '2026-03-19T00:00:00.000Z',
                         ),
@@ -173,6 +181,11 @@ describe('BillingAlertsService', () => {
                 BillingAlertKind.NEW_VERSION_AVAILABLE,
             ]),
         );
+        expect(
+            result.items.find(
+                (item) => item.kind === BillingAlertKind.PAYMENT_RETRY_SCHEDULED,
+            )?.message,
+        ).toContain('Hivepoint will retry');
     });
 
     it('emits overage alert instead of quota exceeded for overage-enabled plans', async () => {

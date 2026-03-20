@@ -12,6 +12,11 @@ export type UsageRecordWriteInput = {
     sourceJobId?: string;
 };
 
+export type UsageEndpointBreakdownItem = {
+    endpoint: string;
+    requestCount: number;
+};
+
 @Injectable()
 export class UsageAggregationService {
     constructor(private readonly prisma: PrismaService) {}
@@ -50,6 +55,27 @@ export class UsageAggregationService {
             create: {
                 subscriptionId: input.subscriptionId,
                 bucketDate,
+                requestCount: input.requestCount,
+            },
+            update: {
+                requestCount: {
+                    increment: input.requestCount,
+                },
+            },
+        });
+
+        await client.usageEndpointDailyAggregate.upsert({
+            where: {
+                subscriptionId_bucketDate_endpoint: {
+                    subscriptionId: input.subscriptionId,
+                    bucketDate,
+                    endpoint: input.endpoint,
+                },
+            },
+            create: {
+                subscriptionId: input.subscriptionId,
+                bucketDate,
+                endpoint: input.endpoint,
                 requestCount: input.requestCount,
             },
             update: {
@@ -126,6 +152,94 @@ export class UsageAggregationService {
         return total;
     }
 
+    async listEndpointUsageForWindow(
+        params: {
+            subscriptionId: string;
+            periodStart: Date;
+            periodEnd: Date;
+            limit?: number;
+        },
+        client: UsageDbClient = this.prisma,
+    ): Promise<UsageEndpointBreakdownItem[]> {
+        const { subscriptionId, periodStart, periodEnd } = params;
+        if (periodStart >= periodEnd) {
+            return [];
+        }
+
+        const fullDaysStart = this.isUtcDayBoundary(periodStart)
+            ? new Date(periodStart)
+            : this.getNextUtcDayStart(periodStart);
+        const fullDaysEnd = this.getUtcDayStart(periodEnd);
+        const startPartialEnd =
+            fullDaysStart < periodEnd ? fullDaysStart : periodEnd;
+        const endPartialStart =
+            fullDaysEnd > startPartialEnd ? fullDaysEnd : startPartialEnd;
+        const endpointUsage = new Map<string, number>();
+
+        if (periodStart < startPartialEnd) {
+            this.addEndpointUsage(
+                endpointUsage,
+                await this.groupRawUsageByEndpoint(client, {
+                    subscriptionId,
+                    occurredAt: {
+                        gte: periodStart,
+                        lt: startPartialEnd,
+                    },
+                }),
+            );
+        }
+
+        if (fullDaysStart < fullDaysEnd) {
+            this.addEndpointUsage(
+                endpointUsage,
+                await this.groupDailyAggregateUsageByEndpoint(client, {
+                    subscriptionId,
+                    bucketDate: {
+                        gte: fullDaysStart,
+                        lt: fullDaysEnd,
+                    },
+                }),
+            );
+
+            this.addEndpointUsage(
+                endpointUsage,
+                await this.groupRawUsageByEndpoint(client, {
+                    subscriptionId,
+                    aggregatedAt: null,
+                    occurredAt: {
+                        gte: fullDaysStart,
+                        lt: fullDaysEnd,
+                    },
+                }),
+            );
+        }
+
+        if (endPartialStart < periodEnd) {
+            this.addEndpointUsage(
+                endpointUsage,
+                await this.groupRawUsageByEndpoint(client, {
+                    subscriptionId,
+                    occurredAt: {
+                        gte: endPartialStart,
+                        lt: periodEnd,
+                    },
+                }),
+            );
+        }
+
+        return [...endpointUsage.entries()]
+            .map(([endpoint, requestCount]) => ({
+                endpoint,
+                requestCount,
+            }))
+            .sort(
+                (left, right) =>
+                    right.requestCount - left.requestCount ||
+                    left.endpoint.localeCompare(right.endpoint),
+            )
+            .slice(0, params.limit ?? 5);
+    }
+
     private async sumRawUsage(
         client: UsageDbClient,
         where: Prisma.UsageRecordWhereInput,
@@ -152,6 +266,54 @@ export class UsageAggregationService {
         });
 
         return aggregate._sum.requestCount ?? 0;
+    }
+
+    private async groupRawUsageByEndpoint(
+        client: UsageDbClient,
+        where: Prisma.UsageRecordWhereInput,
+    ): Promise<UsageEndpointBreakdownItem[]> {
+        const groups = await client.usageRecord.groupBy({
+            by: ['endpoint'],
+            where,
+            _sum: {
+                requestCount: true,
+            },
+        });
+
+        return groups.map((group) => ({
+            endpoint: group.endpoint,
+            requestCount: group._sum.requestCount ?? 0,
+        }));
+    }
+
+    private async groupDailyAggregateUsageByEndpoint(
+        client: UsageDbClient,
+        where: Prisma.UsageEndpointDailyAggregateWhereInput,
+    ): Promise<UsageEndpointBreakdownItem[]> {
+        const groups = await client.usageEndpointDailyAggregate.groupBy({
+            by: ['endpoint'],
+            where,
+            _sum: {
+                requestCount: true,
+            },
+        });
+
+        return groups.map((group) => ({
+            endpoint: group.endpoint,
+            requestCount: group._sum.requestCount ?? 0,
+        }));
+    }
+
+    private addEndpointUsage(
+        target: Map<string, number>,
+        rows: UsageEndpointBreakdownItem[],
+    ): void {
+        rows.forEach((row) => {
+            target.set(
+                row.endpoint,
+                (target.get(row.endpoint) ?? 0) + row.requestCount,
+            );
+        });
     }
 
     private getUtcDayStart(date: Date): Date {

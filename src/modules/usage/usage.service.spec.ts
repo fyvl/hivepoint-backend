@@ -32,6 +32,7 @@ describe('UsageService', () => {
     let configService: AppConfigService;
     let usageAggregationService: {
         sumUsageForWindow: jest.Mock;
+        listEndpointUsageForWindow: jest.Mock;
         recordUsage: jest.Mock;
         recordUsageInTransaction: jest.Mock;
     };
@@ -73,6 +74,7 @@ describe('UsageService', () => {
 
         usageAggregationService = {
             sumUsageForWindow: jest.fn(),
+            listEndpointUsageForWindow: jest.fn(),
             recordUsage: jest.fn(),
             recordUsageInTransaction: jest.fn(),
         };
@@ -747,6 +749,16 @@ describe('UsageService', () => {
             },
         ]);
         usageAggregationService.sumUsageForWindow.mockResolvedValue(120);
+        usageAggregationService.listEndpointUsageForWindow.mockResolvedValue([
+            {
+                endpoint: '/v1/search',
+                requestCount: 90,
+            },
+            {
+                endpoint: '/v1/health',
+                requestCount: 30,
+            },
+        ]);
 
         const user = {
             id: 'user-1',
@@ -772,6 +784,13 @@ describe('UsageService', () => {
             );
             expect(
                 usageAggregationService.sumUsageForWindow,
+            ).toHaveBeenCalledWith({
+                subscriptionId: 'sub-1',
+                periodStart,
+                periodEnd,
+            });
+            expect(
+                usageAggregationService.listEndpointUsageForWindow,
             ).toHaveBeenCalledWith({
                 subscriptionId: 'sub-1',
                 periodStart,
@@ -805,6 +824,16 @@ describe('UsageService', () => {
                         id: 'prod-1',
                         title: 'Payments API',
                     },
+                    topEndpoints: [
+                        {
+                            endpoint: '/v1/search',
+                            requestCount: 90,
+                        },
+                        {
+                            endpoint: '/v1/health',
+                            requestCount: 30,
+                        },
+                    ],
                 },
             ]);
         } finally {
@@ -843,6 +872,12 @@ describe('UsageService', () => {
             },
         ]);
         usageAggregationService.sumUsageForWindow.mockResolvedValue(320);
+        usageAggregationService.listEndpointUsageForWindow.mockResolvedValue([
+            {
+                endpoint: '/v1/search',
+                requestCount: 320,
+            },
+        ]);
 
         const user = {
             id: 'user-1',
@@ -881,6 +916,12 @@ describe('UsageService', () => {
                         id: 'prod-1',
                         title: 'Payments API',
                     },
+                    topEndpoints: [
+                        {
+                            endpoint: '/v1/search',
+                            requestCount: 320,
+                        },
+                    ],
                 },
             ]);
         } finally {

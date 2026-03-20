@@ -42,7 +42,10 @@ describe('SubscriptionsService', () => {
     let activePaymentProvider: jest.Mocked<PaymentProvider>;
     let mockPaymentProvider: jest.Mocked<PaymentProvider>;
     let stripePaymentProvider: jest.Mocked<PaymentProvider>;
-    let configService: Pick<AppConfigService, 'billingGracePeriodDays'>;
+    let configService: Pick<
+        AppConfigService,
+        'billingGracePeriodDays' | 'billingManagedRetryEnabled' | 'billingManagedRetryDelaysMinutes'
+    >;
     let txExecuteRaw: jest.Mock;
 
     beforeEach(() => {
@@ -79,21 +82,26 @@ describe('SubscriptionsService', () => {
             createCustomerPortalSession: jest.fn(),
             createPayment: jest.fn(),
             scheduleSubscriptionCancelAtPeriodEnd: jest.fn(),
+            retryInvoicePayment: jest.fn(),
         };
         mockPaymentProvider = {
             provider: 'MOCK',
             createCustomerPortalSession: jest.fn(),
             createPayment: jest.fn(),
             scheduleSubscriptionCancelAtPeriodEnd: jest.fn(),
+            retryInvoicePayment: jest.fn(),
         };
         stripePaymentProvider = {
             provider: 'STRIPE',
             createCustomerPortalSession: jest.fn(),
             createPayment: jest.fn(),
             scheduleSubscriptionCancelAtPeriodEnd: jest.fn(),
+            retryInvoicePayment: jest.fn(),
         };
         configService = {
             billingGracePeriodDays: 3,
+            billingManagedRetryEnabled: true,
+            billingManagedRetryDelaysMinutes: [60, 360, 1440],
         };
 
         service = new SubscriptionsService(
@@ -595,14 +603,19 @@ describe('SubscriptionsService', () => {
 
         expect(prisma.invoice.update).toHaveBeenCalledWith({
             where: { id: 'inv-renew-1' },
-            data: {
+            data: expect.objectContaining({
                 status: InvoiceStatus.PAST_DUE,
                 paymentProvider: BillingProvider.STRIPE,
                 externalCheckoutSessionId: null,
                 externalInvoiceId: 'in_renew_1',
                 attemptCount: 2,
                 nextPaymentAttemptAt,
-            },
+                managedRetryCount: 0,
+                managedNextRetryAt: expect.any(Date),
+                managedLastRetryAt: null,
+                managedRetryExhaustedAt: null,
+                managedLastRetryError: null,
+            }),
         });
         expect(prisma.subscription.update).toHaveBeenCalledWith({
             where: { id: 'sub-1' },

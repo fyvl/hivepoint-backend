@@ -32,6 +32,14 @@ export class UsageSummaryProductDto {
     title!: string;
 }
 
+export class UsageSummaryEndpointDto {
+    @ApiProperty({ example: '/v1/search' })
+    endpoint!: string;
+
+    @ApiProperty({ example: 120 })
+    requestCount!: number;
+}
+
 export class UsageSummaryItemDto {
     @ApiProperty({ example: 'uuid' })
     subscriptionId!: string;
@@ -77,6 +85,9 @@ export class UsageSummaryItemDto {
 
     @ApiProperty({ type: UsageSummaryProductDto })
     product!: UsageSummaryProductDto;
+
+    @ApiProperty({ type: [UsageSummaryEndpointDto] })
+    topEndpoints!: UsageSummaryEndpointDto[];
 }
 
 export class UsageSummaryResponseDto {

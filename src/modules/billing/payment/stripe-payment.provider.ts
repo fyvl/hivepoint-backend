@@ -10,6 +10,8 @@ import type {
     CreatePaymentParams,
     CreatePaymentResult,
     PaymentProvider,
+    RetryInvoicePaymentParams,
+    RetryInvoicePaymentResult,
     ScheduleSubscriptionCancelParams,
     ScheduleSubscriptionCancelResult,
 } from './payment.provider';
@@ -132,6 +134,30 @@ export class StripePaymentProvider implements PaymentProvider {
         };
     }
 
+    async retryInvoicePayment(
+        params: RetryInvoicePaymentParams,
+    ): Promise<RetryInvoicePaymentResult> {
+        const invoice = await this.stripeClientService.client.invoices.pay(
+            params.externalInvoiceId,
+        );
+        const externalSubscriptionId =
+            this.extractExternalSubscriptionId(invoice);
+
+        return {
+            externalInvoiceId: invoice.id,
+            externalSubscriptionId,
+            amountCents: invoice.total,
+            currency: invoice.currency.toUpperCase(),
+            periodStart: new Date(invoice.period_start * 1000),
+            periodEnd: new Date(invoice.period_end * 1000),
+            status: this.mapInvoiceStatus(invoice),
+            attemptCount: invoice.attempt_count ?? 0,
+            nextPaymentAttemptAt: invoice.next_payment_attempt
+                ? new Date(invoice.next_payment_attempt * 1000)
+                : null,
+        };
+    }
+
     private async ensureCustomer(
         userId: string,
         userEmail: string,
@@ -218,5 +244,31 @@ export class StripePaymentProvider implements PaymentProvider {
         }
 
         throw error;
+    }
+
+    private extractExternalSubscriptionId(
+        invoice: Stripe.Invoice,
+    ): string | undefined {
+        const subscription =
+            invoice.parent?.subscription_details?.subscription ?? null;
+
+        return typeof subscription === 'string' ? subscription : undefined;
+    }
+
+    private mapInvoiceStatus(
+        invoice: Stripe.Invoice,
+    ): RetryInvoicePaymentResult['status'] {
+        if (invoice.status === 'paid') {
+            return 'PAID';
+        }
+
+        if (
+            invoice.status === 'void' ||
+            invoice.status === 'uncollectible'
+        ) {
+            return 'VOID';
+        }
+
+        return 'PAST_DUE';
     }
 }

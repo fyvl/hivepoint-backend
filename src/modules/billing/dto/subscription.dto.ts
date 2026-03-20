@@ -64,6 +64,18 @@ export class SubscriptionInvoiceDto {
     @ApiProperty({ type: String, format: 'date-time', nullable: true })
     nextPaymentAttemptAt!: Date | null;
 
+    @ApiProperty({ example: 1 })
+    managedRetryCount!: number;
+
+    @ApiProperty({ type: String, format: 'date-time', nullable: true })
+    managedNextRetryAt!: Date | null;
+
+    @ApiProperty({ type: String, format: 'date-time', nullable: true })
+    managedLastRetryAt!: Date | null;
+
+    @ApiProperty({ type: String, format: 'date-time', nullable: true })
+    managedRetryExhaustedAt!: Date | null;
+
     @ApiProperty({ type: String, format: 'date-time' })
     createdAt!: Date;
 }

@@ -21,6 +21,8 @@ Provides plan listing/creation and subscription listing/cancel. Payment processi
 ## Notes
 - Subscribe flow (`POST /billing/subscribe`) and mock payments are documented in `payments-mock.md`.
 - Stripe webhook sync now also stores recurring Stripe invoices locally by `externalInvoiceId`, so invoice history is not limited to the first checkout invoice.
+- Stripe renewal failures now get app-managed retry state on local invoices (`managedRetryCount`, `managedNextRetryAt`, `managedLastRetryAt`, `managedRetryExhaustedAt`), and a background worker manually re-attempts `invoice.pay` according to `BILLING_MANAGED_RETRY_DELAYS_MINUTES`.
+- For a strictly app-owned retry cadence, disable or minimize Stripe account-level Smart Retries; otherwise provider retries can still happen alongside the app-managed schedule.
 - Plans can now expose overage policy to buyers through plan and subscription DTOs, but automated overage invoicing/collection is still a later production step.
 - `PlanPeriod` enum currently contains only `MONTH`.
 

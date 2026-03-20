@@ -154,6 +154,7 @@ model Subscription {
   usageRecords           UsageRecord[]
   usageIngestJobs        UsageIngestJob[]
   usageDailyAggregates   UsageDailyAggregate[]
+  usageEndpointDailyAggregates UsageEndpointDailyAggregate[]
 
   @@index([userId])
   @@index([planId])
@@ -170,12 +171,18 @@ model Invoice {
   status                    InvoiceStatus   @default(DRAFT)
   attemptCount              Int             @default(0)
   nextPaymentAttemptAt      DateTime?
+  managedRetryCount         Int             @default(0)
+  managedNextRetryAt        DateTime?
+  managedLastRetryAt        DateTime?
+  managedRetryExhaustedAt   DateTime?
+  managedLastRetryError     String?
   periodStart               DateTime
   periodEnd                 DateTime
   createdAt                 DateTime        @default(now())
   subscription              Subscription    @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@index([subscriptionId])
+  @@index([status, managedNextRetryAt, createdAt])
 }
 
 model BackgroundJobLease {
@@ -246,6 +253,20 @@ model UsageDailyAggregate {
 
   @@id([subscriptionId, bucketDate])
   @@index([subscriptionId, bucketDate])
+}
+
+model UsageEndpointDailyAggregate {
+  subscriptionId String
+  bucketDate     DateTime
+  endpoint       String
+  requestCount   Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@id([subscriptionId, bucketDate, endpoint])
+  @@index([subscriptionId, bucketDate])
+  @@index([subscriptionId, endpoint, bucketDate])
 }
 
 model GatewayBurstBucket {

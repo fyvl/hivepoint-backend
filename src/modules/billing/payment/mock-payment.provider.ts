@@ -9,6 +9,8 @@ import type {
     CreatePaymentParams,
     CreatePaymentResult,
     PaymentProvider,
+    RetryInvoicePaymentParams,
+    RetryInvoicePaymentResult,
     ScheduleSubscriptionCancelParams,
     ScheduleSubscriptionCancelResult,
 } from './payment.provider';
@@ -44,6 +46,17 @@ export class MockPaymentProvider implements PaymentProvider {
         void params;
         return Promise.resolve({
             cancelAtPeriodEnd: true,
+        });
+    }
+
+    retryInvoicePayment(
+        params: RetryInvoicePaymentParams,
+    ): Promise<RetryInvoicePaymentResult> {
+        void params;
+        throw new AppError({
+            code: ErrorCodes.PAYMENT_PROVIDER_NOT_ENABLED,
+            message: 'PAYMENT_PROVIDER_NOT_ENABLED',
+            httpStatus: 400,
         });
     }
 }

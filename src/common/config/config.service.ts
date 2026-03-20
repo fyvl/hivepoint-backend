@@ -98,6 +98,28 @@ export class AppConfigService {
         );
     }
 
+    get billingManagedRetryEnabled(): boolean {
+        return this.configService.getOrThrow('BILLING_MANAGED_RETRY_ENABLED');
+    }
+
+    get billingManagedRetryIntervalSeconds(): number {
+        return this.configService.getOrThrow(
+            'BILLING_MANAGED_RETRY_INTERVAL_SECONDS',
+        );
+    }
+
+    get billingManagedRetryBatchSize(): number {
+        return this.configService.getOrThrow(
+            'BILLING_MANAGED_RETRY_BATCH_SIZE',
+        );
+    }
+
+    get billingManagedRetryDelaysMinutes(): number[] {
+        return this.configService.getOrThrow(
+            'BILLING_MANAGED_RETRY_DELAYS_MINUTES',
+        );
+    }
+
     get apiKeySalt(): string {
         return this.configService.getOrThrow('API_KEY_SALT');
     }
