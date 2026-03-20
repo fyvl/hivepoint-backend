@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { AppModule } from '../../src/app.module';
 import { HttpExceptionFilter } from '../../src/common/filters/http-exception.filter';
+import { applyRequestObservability } from '../../src/common/observability/request-observability';
 import { OpenApiService } from '../../src/common/openapi/openapi.service';
 
 export const createTestApp = async (): Promise<INestApplication> => {
@@ -12,6 +13,7 @@ export const createTestApp = async (): Promise<INestApplication> => {
     }).compile();
 
     const app = moduleFixture.createNestApplication({ rawBody: true });
+    applyRequestObservability(app);
     app.use(cookieParser());
     app.useGlobalFilters(new HttpExceptionFilter());
 

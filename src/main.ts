@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { AppConfigService } from './common/config/config.service';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { applyRequestObservability } from './common/observability/request-observability';
 import { OpenApiService } from './common/openapi/openapi.service';
 
 async function bootstrap(): Promise<void> {
@@ -18,6 +19,7 @@ async function bootstrap(): Promise<void> {
         credentials: true,
     });
 
+    applyRequestObservability(app);
     app.use(cookieParser());
     app.useGlobalFilters(new HttpExceptionFilter());
 

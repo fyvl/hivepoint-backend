@@ -83,9 +83,7 @@ export class AppConfigService {
     }
 
     get billingReconciliationEnabled(): boolean {
-        return this.configService.getOrThrow(
-            'BILLING_RECONCILIATION_ENABLED',
-        );
+        return this.configService.getOrThrow('BILLING_RECONCILIATION_ENABLED');
     }
 
     get billingReconciliationIntervalSeconds(): number {
@@ -97,6 +95,84 @@ export class AppConfigService {
     get billingReconciliationBatchSize(): number {
         return this.configService.getOrThrow(
             'BILLING_RECONCILIATION_BATCH_SIZE',
+        );
+    }
+
+    get apiKeySalt(): string {
+        return this.configService.getOrThrow('API_KEY_SALT');
+    }
+
+    get usageIngestSecret(): string {
+        return this.configService.getOrThrow('USAGE_INGEST_SECRET');
+    }
+
+    get usageIngestQueueEnabled(): boolean {
+        return this.configService.getOrThrow('USAGE_INGEST_QUEUE_ENABLED');
+    }
+
+    get usageIngestQueueIntervalSeconds(): number {
+        return this.configService.getOrThrow(
+            'USAGE_INGEST_QUEUE_INTERVAL_SECONDS',
+        );
+    }
+
+    get usageIngestQueueBatchSize(): number {
+        return this.configService.getOrThrow('USAGE_INGEST_QUEUE_BATCH_SIZE');
+    }
+
+    get alertDeliveryEnabled(): boolean {
+        return this.configService.getOrThrow('ALERT_DELIVERY_ENABLED');
+    }
+
+    get alertDeliveryWebhookUrl(): string | undefined {
+        return this.configService.get('ALERT_DELIVERY_WEBHOOK_URL');
+    }
+
+    get alertDeliveryIntervalSeconds(): number {
+        return this.configService.getOrThrow('ALERT_DELIVERY_INTERVAL_SECONDS');
+    }
+
+    get alertDeliveryCooldownSeconds(): number {
+        return this.configService.getOrThrow('ALERT_DELIVERY_COOLDOWN_SECONDS');
+    }
+
+    get alertDeliveryTimeoutMs(): number {
+        return this.configService.getOrThrow('ALERT_DELIVERY_TIMEOUT_MS');
+    }
+
+    get gatewayUpstreamTimeoutMs(): number {
+        return this.configService.getOrThrow('GATEWAY_UPSTREAM_TIMEOUT_MS');
+    }
+
+    get gatewayBurstLimitEnabled(): boolean {
+        return this.configService.getOrThrow('GATEWAY_BURST_LIMIT_ENABLED');
+    }
+
+    get gatewayBurstWindowSeconds(): number {
+        return this.configService.getOrThrow('GATEWAY_BURST_WINDOW_SECONDS');
+    }
+
+    get gatewayBurstMultiplier(): number {
+        return this.configService.getOrThrow('GATEWAY_BURST_MULTIPLIER');
+    }
+
+    get gatewayBurstMinRequests(): number {
+        return this.configService.getOrThrow('GATEWAY_BURST_MIN_REQUESTS');
+    }
+
+    get gatewayBurstMaxRequests(): number {
+        return this.configService.getOrThrow('GATEWAY_BURST_MAX_REQUESTS');
+    }
+
+    get gatewayRequestBodyLimitBytes(): number {
+        return this.configService.getOrThrow(
+            'GATEWAY_REQUEST_BODY_LIMIT_BYTES',
+        );
+    }
+
+    get gatewayResponseBodyLimitBytes(): number {
+        return this.configService.getOrThrow(
+            'GATEWAY_RESPONSE_BODY_LIMIT_BYTES',
         );
     }
 }

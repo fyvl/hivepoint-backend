@@ -1,6 +1,7 @@
 # Error Codes
 
 All API errors are returned in a unified format:
+
 ```json
 {
     "error": {
@@ -12,6 +13,7 @@ All API errors are returned in a unified format:
 ```
 
 ## Codes in use
+
 | Code | HTTP status | Where used |
 | --- | --- | --- |
 | `INTERNAL_ERROR` | 500 | `OpenApiService` when OpenAPI document is not initialized; default in `HttpExceptionFilter`. |
@@ -40,9 +42,11 @@ All API errors are returned in a unified format:
 | `NO_ACTIVE_SUBSCRIPTION` | 403 | Gateway dispatch when the API key owner has no active subscription for the product. |
 | `QUOTA_EXCEEDED` | 429 | Gateway dispatch when the request would exceed the plan quota. |
 | `RATE_LIMIT_EXCEEDED` | 429 | Gateway dispatch when the request would exceed the plan RPM limit. |
+| `GATEWAY_REQUEST_BODY_TOO_LARGE` | 413 | Gateway dispatch/proxy when the outbound request body exceeds the configured body limit. |
 | `USAGE_INGEST_FORBIDDEN` | 403 | Usage internal endpoints when `x-usage-secret` is missing or invalid. |
 | `PAYMENT_PROVIDER_NOT_ENABLED` | 400 | Billing Stripe provider endpoints when Stripe is not active. |
 | `STRIPE_WEBHOOK_INVALID` | 400 | Stripe webhook signature validation. |
 | `CHECKOUT_SESSION_NOT_FOUND` | 404 | Billing checkout status lookup. |
 | `GATEWAY_TARGET_NOT_CONFIGURED` | 502 | Gateway dispatch when no upstream base URL can be resolved from the stored OpenAPI snapshot. |
 | `GATEWAY_UPSTREAM_UNAVAILABLE` | 502 | Gateway dispatch when the upstream request fails or times out. |
+| `GATEWAY_RESPONSE_BODY_TOO_LARGE` | 502 | Gateway dispatch/proxy when the buffered upstream response body exceeds the configured limit. |

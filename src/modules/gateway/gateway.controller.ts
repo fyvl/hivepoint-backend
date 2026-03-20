@@ -18,10 +18,12 @@ import {
     ApiOkResponse,
     ApiOperation,
     ApiParam,
+    ApiPayloadTooLargeResponse,
     ApiTags,
     ApiTooManyRequestsResponse,
     ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { once } from 'events';
 import type { Request, Response } from 'express';
 import { AppError } from '../../common/errors/app.error';
 import { ErrorCodes } from '../../common/errors/error.codes';
@@ -40,6 +42,10 @@ const SUPPORTED_PROXY_METHODS = new Set<GatewayDispatchInput['method']>([
     'PATCH',
     'DELETE',
 ]);
+
+type GatewayProxyRequest = Request & {
+    rawBody?: Buffer;
+};
 
 @ApiTags('gateway')
 @Controller('gateway')
@@ -70,9 +76,12 @@ export class GatewayController {
     @ApiTooManyRequestsResponse({
         description: 'QUOTA_EXCEEDED or RATE_LIMIT_EXCEEDED',
     })
+    @ApiPayloadTooLargeResponse({
+        description: 'GATEWAY_REQUEST_BODY_TOO_LARGE',
+    })
     @ApiBadGatewayResponse({
         description:
-            'GATEWAY_TARGET_NOT_CONFIGURED or GATEWAY_UPSTREAM_UNAVAILABLE',
+            'GATEWAY_TARGET_NOT_CONFIGURED, GATEWAY_UPSTREAM_UNAVAILABLE, or GATEWAY_RESPONSE_BODY_TOO_LARGE',
     })
     async dispatch(
         @Body(new ZodValidationPipe(gatewayDispatchSchema))
@@ -108,9 +117,12 @@ export class GatewayController {
     @ApiTooManyRequestsResponse({
         description: 'QUOTA_EXCEEDED or RATE_LIMIT_EXCEEDED',
     })
+    @ApiPayloadTooLargeResponse({
+        description: 'GATEWAY_REQUEST_BODY_TOO_LARGE',
+    })
     @ApiBadGatewayResponse({
         description:
-            'GATEWAY_TARGET_NOT_CONFIGURED or GATEWAY_UPSTREAM_UNAVAILABLE',
+            'GATEWAY_TARGET_NOT_CONFIGURED, GATEWAY_UPSTREAM_UNAVAILABLE, or GATEWAY_RESPONSE_BODY_TOO_LARGE',
     })
     async proxy(
         @Param('productId') productId: string,
@@ -166,6 +178,24 @@ export class GatewayController {
                 String(result.usage.remainingRateLimitRequests),
             );
         }
+        if (typeof result.usage.burstLimit === 'number') {
+            response.setHeader(
+                'x-hivepoint-burst-limit',
+                String(result.usage.burstLimit),
+            );
+        }
+        if (typeof result.usage.remainingBurstRequests === 'number') {
+            response.setHeader(
+                'x-hivepoint-burst-remaining',
+                String(result.usage.remainingBurstRequests),
+            );
+        }
+        if (typeof result.usage.burstWindowSeconds === 'number') {
+            response.setHeader(
+                'x-hivepoint-burst-window-seconds',
+                String(result.usage.burstWindowSeconds),
+            );
+        }
         if (result.usage.periodEnd) {
             response.setHeader(
                 'x-hivepoint-period-end',
@@ -174,12 +204,47 @@ export class GatewayController {
         }
 
         response.status(result.status);
+        if (result.responseStream) {
+            await this.pipeProxyResponseStream(result.responseStream, response);
+            return;
+        }
+
         if (result.rawBody === null) {
             response.send();
             return;
         }
 
         response.send(result.rawBody);
+    }
+
+    private async pipeProxyResponseStream(
+        stream: ReadableStream<Uint8Array>,
+        response: Response,
+    ): Promise<void> {
+        const reader = stream.getReader();
+
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) {
+                    break;
+                }
+
+                if (!value) {
+                    continue;
+                }
+
+                if (!response.write(Buffer.from(value))) {
+                    await once(response, 'drain');
+                }
+            }
+
+            response.end();
+        } catch (error) {
+            response.destroy(error as Error);
+        } finally {
+            reader.releaseLock();
+        }
     }
 
     private resolveProxyPath(request: Request): string {
@@ -284,14 +349,23 @@ export class GatewayController {
     }
 
     private readProxyBody(request: Request): unknown {
+        const proxyRequest = request as GatewayProxyRequest;
         const hasBody =
             request.headers['content-length'] !== undefined ||
-            request.headers['transfer-encoding'] !== undefined;
+            request.headers['transfer-encoding'] !== undefined ||
+            (Buffer.isBuffer(proxyRequest.rawBody) &&
+                proxyRequest.rawBody.length > 0);
 
         if (!hasBody) {
             return undefined;
         }
 
+        if (Buffer.isBuffer(proxyRequest.rawBody)) {
+            return proxyRequest.rawBody;
+        }
+
         return request.body;
     }
 }
+
+

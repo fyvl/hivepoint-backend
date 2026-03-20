@@ -2,213 +2,307 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum Role {
-    BUYER
-    SELLER
-    ADMIN
+  BUYER
+  SELLER
+  ADMIN
 }
 
 enum ProductStatus {
-    DRAFT
-    PUBLISHED
-    HIDDEN
+  DRAFT
+  PUBLISHED
+  HIDDEN
 }
 
 enum VersionStatus {
-    DRAFT
-    PUBLISHED
+  DRAFT
+  PUBLISHED
 }
 
 enum PlanPeriod {
-    MONTH
+  MONTH
 }
 
 enum SubscriptionStatus {
-    PENDING
-    ACTIVE
-    CANCELED
-    PAST_DUE
+  PENDING
+  ACTIVE
+  CANCELED
+  PAST_DUE
 }
 
 enum InvoiceStatus {
-    DRAFT
-    PAID
-    PAST_DUE
-    VOID
+  DRAFT
+  PAID
+  PAST_DUE
+  VOID
 }
 
 enum BillingProvider {
-    MOCK
-    STRIPE
+  MOCK
+  STRIPE
+}
+
+enum UsageIngestJobStatus {
+  PENDING
+  FAILED
+  PROCESSED
 }
 
 model User {
-    id               String         @id @default(uuid())
-    email            String         @unique
-    passwordHash     String
-    role             Role           @default(BUYER)
-    stripeCustomerId String?        @unique
-    createdAt        DateTime       @default(now())
-    updatedAt        DateTime       @updatedAt
-    refreshTokens    RefreshToken[]
-    products         ApiProduct[]
-    subscriptions    Subscription[]
-    apiKeys          ApiKey[]
-    productViews     ProductView[]
+  id               String         @id @default(uuid())
+  email            String         @unique
+  passwordHash     String
+  role             Role           @default(BUYER)
+  stripeCustomerId String?        @unique
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  refreshTokens    RefreshToken[]
+  products         ApiProduct[]
+  subscriptions    Subscription[]
+  apiKeys          ApiKey[]
+  productViews     ProductView[]
 }
 
 model RefreshToken {
-    id        String   @id @default(uuid())
-    userId    String
-    tokenHash String
-    expiresAt DateTime
-    createdAt DateTime @default(now())
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@index([userId])
+  @@index([userId])
 }
 
 model ApiProduct {
-    id          String        @id @default(uuid())
-    ownerId     String
-    title       String
-    description String
-    category    String
-    tags        String[]
-    status      ProductStatus @default(DRAFT)
-    createdAt   DateTime      @default(now())
-    updatedAt   DateTime      @updatedAt
-    owner       User          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-    versions    ApiVersion[]
-    plans       Plan[]
-    productViews ProductView[]
+  id           String        @id @default(uuid())
+  ownerId      String
+  title        String
+  description  String
+  category     String
+  tags         String[]
+  status       ProductStatus @default(DRAFT)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  versions     ApiVersion[]
+  plans        Plan[]
+  productViews ProductView[]
 
-    @@index([ownerId])
+  @@index([ownerId])
 }
 
 model ApiVersion {
-    id         String        @id @default(uuid())
-    productId  String
-    version    String
-    status     VersionStatus @default(DRAFT)
-    openApiUrl String
-    openApiSnapshot String?
-    openApiFetchedAt DateTime?
-    createdAt  DateTime      @default(now())
-    product    ApiProduct    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id               String        @id @default(uuid())
+  productId        String
+  version          String
+  status           VersionStatus @default(DRAFT)
+  openApiUrl       String
+  openApiSnapshot  String?
+  openApiFetchedAt DateTime?
+  createdAt        DateTime      @default(now())
+  product          ApiProduct    @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-    @@index([productId])
-    @@unique([productId, version])
+  @@unique([productId, version])
+  @@index([productId])
 }
 
 model Plan {
-    id            String         @id @default(uuid())
-    productId     String
-    name          String
-    priceCents    Int
-    currency      String         @default("EUR")
-    period        PlanPeriod     @default(MONTH)
-    quotaRequests Int
-    rateLimitRpm  Int?
-    isActive      Boolean        @default(true)
-    createdAt     DateTime       @default(now())
-    product       ApiProduct     @relation(fields: [productId], references: [id], onDelete: Cascade)
-    subscriptions Subscription[]
+  id            String         @id @default(uuid())
+  productId     String
+  name          String
+  priceCents    Int
+  currency      String         @default("EUR")
+  period        PlanPeriod     @default(MONTH)
+  quotaRequests Int
+  rateLimitRpm  Int?
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  product       ApiProduct     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
 
-    @@index([productId])
+  @@index([productId])
 }
 
 model Subscription {
-    id                     String             @id @default(uuid())
-    userId                 String
-    planId                 String
-    paymentProvider        BillingProvider    @default(MOCK)
-    externalSubscriptionId String?            @unique
-    status                 SubscriptionStatus @default(PENDING)
-    currentPeriodStart     DateTime?
-    currentPeriodEnd       DateTime?
-    gracePeriodEndsAt      DateTime?
-    cancelAtPeriodEnd      Boolean            @default(false)
-    createdAt              DateTime           @default(now())
-    updatedAt              DateTime           @updatedAt
-    user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-    plan                   Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
-    invoices               Invoice[]
-    usageRecords           UsageRecord[]
+  id                     String                @id @default(uuid())
+  userId                 String
+  planId                 String
+  paymentProvider        BillingProvider       @default(MOCK)
+  externalSubscriptionId String?               @unique
+  status                 SubscriptionStatus    @default(PENDING)
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  gracePeriodEndsAt      DateTime?
+  cancelAtPeriodEnd      Boolean               @default(false)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                   Plan                  @relation(fields: [planId], references: [id], onDelete: Restrict)
+  invoices               Invoice[]
+  usageRecords           UsageRecord[]
+  usageIngestJobs        UsageIngestJob[]
+  usageDailyAggregates   UsageDailyAggregate[]
 
-    @@index([userId])
-    @@index([planId])
+  @@index([userId])
+  @@index([planId])
 }
 
 model Invoice {
-    id                        String          @id @default(uuid())
-    subscriptionId            String
-    paymentProvider           BillingProvider @default(MOCK)
-    externalCheckoutSessionId String?         @unique
-    externalInvoiceId         String?         @unique
-    amountCents               Int
-    currency                  String          @default("EUR")
-    status                    InvoiceStatus   @default(DRAFT)
-    attemptCount              Int             @default(0)
-    nextPaymentAttemptAt      DateTime?
-    periodStart               DateTime
-    periodEnd                 DateTime
-    createdAt                 DateTime        @default(now())
-    subscription              Subscription    @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  id                        String          @id @default(uuid())
+  subscriptionId            String
+  paymentProvider           BillingProvider @default(MOCK)
+  externalCheckoutSessionId String?         @unique
+  externalInvoiceId         String?         @unique
+  amountCents               Int
+  currency                  String          @default("EUR")
+  status                    InvoiceStatus   @default(DRAFT)
+  attemptCount              Int             @default(0)
+  nextPaymentAttemptAt      DateTime?
+  periodStart               DateTime
+  periodEnd                 DateTime
+  createdAt                 DateTime        @default(now())
+  subscription              Subscription    @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
-    @@index([subscriptionId])
+  @@index([subscriptionId])
 }
 
 model BackgroundJobLease {
-    name      String   @id
-    ownerId   String
-    expiresAt DateTime
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  name      String   @id
+  ownerId   String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    @@index([expiresAt])
+  @@index([expiresAt])
 }
 
 model ApiKey {
-    id        String   @id @default(uuid())
-    userId    String
-    label     String
-    keyHash   String
-    isActive  Boolean  @default(true)
-    createdAt DateTime @default(now())
-    revokedAt DateTime?
-    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(uuid())
+  userId    String
+  label     String
+  keyHash   String
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    @@index([userId])
+  @@index([userId])
 }
 
 model UsageRecord {
-    id             String       @id @default(uuid())
-    subscriptionId String
-    occurredAt     DateTime     @default(now())
-    endpoint       String
-    requestCount   Int
-    subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  id             String          @id @default(uuid())
+  subscriptionId String
+  sourceJobId    String?         @unique
+  aggregatedAt   DateTime?
+  occurredAt     DateTime        @default(now())
+  endpoint       String
+  requestCount   Int
+  subscription   Subscription    @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  sourceJob      UsageIngestJob? @relation("UsageRecordSourceJob", fields: [sourceJobId], references: [id], onDelete: SetNull)
 
-    @@index([subscriptionId, occurredAt])
+  @@index([subscriptionId, occurredAt])
+  @@index([subscriptionId, aggregatedAt, occurredAt])
+}
+
+model UsageIngestJob {
+  id             String               @id @default(uuid())
+  subscriptionId String
+  occurredAt     DateTime
+  endpoint       String
+  requestCount   Int
+  status         UsageIngestJobStatus @default(PENDING)
+  attempts       Int                  @default(0)
+  availableAt    DateTime             @default(now())
+  processedAt    DateTime?
+  lastError      String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  subscription   Subscription         @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  usageRecord    UsageRecord?         @relation("UsageRecordSourceJob")
+
+  @@index([status, availableAt, createdAt])
+  @@index([subscriptionId, createdAt])
+}
+
+model UsageDailyAggregate {
+  subscriptionId String
+  bucketDate     DateTime
+  requestCount   Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@id([subscriptionId, bucketDate])
+  @@index([subscriptionId, bucketDate])
+}
+
+model GatewayBurstBucket {
+  key          String   @id
+  tokens       Float
+  lastRefillAt DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  requestId    String?
+  actorUserId  String?
+  actorEmail   String?
+  actorRole    Role?
+  action       String
+  resourceType String
+  resourceId   String
+  details      Json?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+  @@index([resourceType, resourceId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model OperationalAlertState {
+  kind                  String   @id
+  fingerprint           String
+  severity              String
+  title                 String
+  message               String
+  details               Json?
+  firstObservedAt       DateTime
+  lastObservedAt        DateTime
+  resolvedAt            DateTime?
+  lastDeliveredAt       DateTime?
+  lastDeliveryAttemptAt DateTime?
+  deliveryCount         Int      @default(0)
+  deliveryFailures      Int      @default(0)
+  lastDeliveryError     String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([resolvedAt, updatedAt])
+  @@index([updatedAt])
 }
 
 model ProductView {
-    id           String     @id @default(uuid())
-    productId    String
-    viewerUserId String?
-    viewedAt     DateTime   @default(now())
-    product      ApiProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-    viewerUser   User?      @relation(fields: [viewerUserId], references: [id], onDelete: SetNull)
+  id           String     @id @default(uuid())
+  productId    String
+  viewerUserId String?
+  viewedAt     DateTime   @default(now())
+  product      ApiProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  viewerUser   User?      @relation(fields: [viewerUserId], references: [id], onDelete: SetNull)
 
-    @@index([productId, viewedAt])
-    @@index([viewerUserId, viewedAt])
+  @@index([productId, viewedAt])
+  @@index([viewerUserId, viewedAt])
 }

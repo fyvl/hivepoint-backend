@@ -78,55 +78,125 @@ export const envSchema = z
             .default(25),
         API_KEY_SALT: z.string().min(1),
         USAGE_INGEST_SECRET: z.string().min(1),
+        USAGE_INGEST_QUEUE_ENABLED: booleanFromString.default(true),
+        USAGE_INGEST_QUEUE_INTERVAL_SECONDS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(10),
+        USAGE_INGEST_QUEUE_BATCH_SIZE: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(100),
+        ALERT_DELIVERY_ENABLED: booleanFromString.default(false),
+        ALERT_DELIVERY_WEBHOOK_URL: z.preprocess(
+            emptyToUndefined,
+            z.string().url().optional(),
+        ),
+        ALERT_DELIVERY_INTERVAL_SECONDS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(60),
+        ALERT_DELIVERY_COOLDOWN_SECONDS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(900),
+        ALERT_DELIVERY_TIMEOUT_MS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(10_000),
+        GATEWAY_UPSTREAM_TIMEOUT_MS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(15_000),
+        GATEWAY_BURST_LIMIT_ENABLED: booleanFromString.default(true),
+        GATEWAY_BURST_WINDOW_SECONDS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(10),
+        GATEWAY_BURST_MULTIPLIER: z.coerce.number().positive().default(2),
+        GATEWAY_BURST_MIN_REQUESTS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(5),
+        GATEWAY_BURST_MAX_REQUESTS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(120),
+        GATEWAY_REQUEST_BODY_LIMIT_BYTES: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(256 * 1024),
+        GATEWAY_RESPONSE_BODY_LIMIT_BYTES: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(1024 * 1024),
     })
     .superRefine((env, context) => {
-        if (env.PAYMENT_PROVIDER !== 'STRIPE') {
-            return;
-        }
-
-        if (!env.STRIPE_SECRET_KEY) {
+        if (env.ALERT_DELIVERY_ENABLED && !env.ALERT_DELIVERY_WEBHOOK_URL) {
             context.addIssue({
                 code: z.ZodIssueCode.custom,
                 message:
-                    'STRIPE_SECRET_KEY is required when PAYMENT_PROVIDER=STRIPE',
-                path: ['STRIPE_SECRET_KEY'],
+                    'ALERT_DELIVERY_WEBHOOK_URL is required when ALERT_DELIVERY_ENABLED=true',
+                path: ['ALERT_DELIVERY_WEBHOOK_URL'],
             });
         }
 
-        if (!env.STRIPE_WEBHOOK_SECRET) {
-            context.addIssue({
-                code: z.ZodIssueCode.custom,
-                message:
-                    'STRIPE_WEBHOOK_SECRET is required when PAYMENT_PROVIDER=STRIPE',
-                path: ['STRIPE_WEBHOOK_SECRET'],
-            });
-        }
+        if (env.PAYMENT_PROVIDER === 'STRIPE') {
+            if (!env.STRIPE_SECRET_KEY) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message:
+                        'STRIPE_SECRET_KEY is required when PAYMENT_PROVIDER=STRIPE',
+                    path: ['STRIPE_SECRET_KEY'],
+                });
+            }
 
-        if (!env.STRIPE_CHECKOUT_SUCCESS_URL) {
-            context.addIssue({
-                code: z.ZodIssueCode.custom,
-                message:
-                    'STRIPE_CHECKOUT_SUCCESS_URL is required when PAYMENT_PROVIDER=STRIPE',
-                path: ['STRIPE_CHECKOUT_SUCCESS_URL'],
-            });
-        }
+            if (!env.STRIPE_WEBHOOK_SECRET) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message:
+                        'STRIPE_WEBHOOK_SECRET is required when PAYMENT_PROVIDER=STRIPE',
+                    path: ['STRIPE_WEBHOOK_SECRET'],
+                });
+            }
 
-        if (!env.STRIPE_CHECKOUT_CANCEL_URL) {
-            context.addIssue({
-                code: z.ZodIssueCode.custom,
-                message:
-                    'STRIPE_CHECKOUT_CANCEL_URL is required when PAYMENT_PROVIDER=STRIPE',
-                path: ['STRIPE_CHECKOUT_CANCEL_URL'],
-            });
-        }
+            if (!env.STRIPE_CHECKOUT_SUCCESS_URL) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message:
+                        'STRIPE_CHECKOUT_SUCCESS_URL is required when PAYMENT_PROVIDER=STRIPE',
+                    path: ['STRIPE_CHECKOUT_SUCCESS_URL'],
+                });
+            }
 
-        if (!env.STRIPE_PORTAL_RETURN_URL) {
-            context.addIssue({
-                code: z.ZodIssueCode.custom,
-                message:
-                    'STRIPE_PORTAL_RETURN_URL is required when PAYMENT_PROVIDER=STRIPE',
-                path: ['STRIPE_PORTAL_RETURN_URL'],
-            });
+            if (!env.STRIPE_CHECKOUT_CANCEL_URL) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message:
+                        'STRIPE_CHECKOUT_CANCEL_URL is required when PAYMENT_PROVIDER=STRIPE',
+                    path: ['STRIPE_CHECKOUT_CANCEL_URL'],
+                });
+            }
+
+            if (!env.STRIPE_PORTAL_RETURN_URL) {
+                context.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message:
+                        'STRIPE_PORTAL_RETURN_URL is required when PAYMENT_PROVIDER=STRIPE',
+                    path: ['STRIPE_PORTAL_RETURN_URL'],
+                });
+            }
         }
     });
 

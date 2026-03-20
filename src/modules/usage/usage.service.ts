@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { SubscriptionStatus } from '@prisma/client';
-import type { Env } from '../../common/config/env.schema';
+import { AppConfigService } from '../../common/config/config.service';
 import type { AuthenticatedUser } from '../../common/decorators/user.decorator';
 import { AppError } from '../../common/errors/app.error';
 import { ErrorCodes } from '../../common/errors/error.codes';
@@ -10,6 +9,7 @@ import { hashApiKey } from '../../common/utils/crypto';
 import { AuthorizeUsageResponseDto } from './dto/authorize-usage-response.dto';
 import { RecordUsageResponseDto } from './dto/record-usage-response.dto';
 import { UsageSummaryResponseDto } from './dto/usage-summary.dto';
+import { UsageAggregationService } from './usage-aggregation.service';
 import type { AuthorizeUsageInput, RecordUsageInput } from './usage.schemas';
 
 const RATE_LIMIT_WINDOW_SECONDS = 60;
@@ -18,7 +18,8 @@ const RATE_LIMIT_WINDOW_SECONDS = 60;
 export class UsageService {
     constructor(
         private readonly prisma: PrismaService,
-        private readonly configService: ConfigService<Env, true>,
+        private readonly configService: AppConfigService,
+        private readonly usageAggregationService: UsageAggregationService,
     ) {}
 
     async authorizeUsage(
@@ -44,7 +45,12 @@ export class UsageService {
         providedSecret?: string,
     ): Promise<RecordUsageResponseDto> {
         this.assertUsageSecret(providedSecret);
-        await this.createUsageRecord(input);
+        if (!this.configService.usageIngestQueueEnabled) {
+            await this.createUsageRecord(input);
+            return { ok: true };
+        }
+
+        await this.enqueueUsageRecord(input);
 
         return { ok: true };
     }
@@ -95,70 +101,50 @@ export class UsageService {
             return { items: [] };
         }
 
-        const orFilters = activeWithPeriod.flatMap((subscription) => {
-            const usageWindow = this.getUsageWindow(subscription, occurredAt);
-            if (!usageWindow) {
-                return [];
-            }
-
-            return [
-                {
-                    subscriptionId: subscription.id,
-                    occurredAt: usageWindow,
-                },
-            ];
-        });
-
-        const grouped = await this.prisma.usageRecord.groupBy({
-            by: ['subscriptionId'],
-            where: {
-                OR: orFilters,
-            },
-            _sum: {
-                requestCount: true,
-            },
-        });
-
-        const usageMap = new Map(
-            grouped.map((row) => [
-                row.subscriptionId,
-                row._sum.requestCount ?? 0,
-            ]),
-        );
-
-        const items = activeWithPeriod.map((subscription) => {
-            const usageWindow = this.getUsageWindow(subscription, occurredAt);
-            const usedRequests = usageMap.get(subscription.id) ?? 0;
-            const quotaRequests = subscription.plan.quotaRequests;
-            const percent =
-                quotaRequests > 0
-                    ? Math.min(
-                          100,
-                          Math.floor((usedRequests / quotaRequests) * 100),
-                      )
+        const items = await Promise.all(
+            activeWithPeriod.map(async (subscription) => {
+                const usageWindow = this.getUsageWindow(
+                    subscription,
+                    occurredAt,
+                );
+                const usedRequests = usageWindow
+                    ? await this.usageAggregationService.sumUsageForWindow({
+                          subscriptionId: subscription.id,
+                          periodStart: usageWindow.gte,
+                          periodEnd: usageWindow.lt,
+                      })
                     : 0;
+                const quotaRequests = subscription.plan.quotaRequests;
+                const percent =
+                    quotaRequests > 0
+                        ? Math.min(
+                              100,
+                              Math.floor((usedRequests / quotaRequests) * 100),
+                          )
+                        : 0;
 
-            return {
-                subscriptionId: subscription.id,
-                status: subscription.status,
-                periodStart: usageWindow?.gte as Date,
-                periodEnd: usageWindow?.lt as Date,
-                gracePeriodEndsAt: subscription.gracePeriodEndsAt,
-                usedRequests,
-                quotaRequests,
-                percent,
-                plan: {
-                    id: subscription.plan.id,
-                    name: subscription.plan.name,
-                    quotaRequests: subscription.plan.quotaRequests,
-                    rateLimitRpm: subscription.plan.rateLimitRpm,
-                },
-                product: {
-                    id: subscription.plan.product.id,
-                    title: subscription.plan.product.title,
-                },
-            };
-        });
+                return {
+                    subscriptionId: subscription.id,
+                    status: subscription.status,
+                    periodStart: usageWindow?.gte as Date,
+                    periodEnd: usageWindow?.lt as Date,
+                    gracePeriodEndsAt: subscription.gracePeriodEndsAt,
+                    usedRequests,
+                    quotaRequests,
+                    percent,
+                    plan: {
+                        id: subscription.plan.id,
+                        name: subscription.plan.name,
+                        quotaRequests: subscription.plan.quotaRequests,
+                        rateLimitRpm: subscription.plan.rateLimitRpm,
+                    },
+                    product: {
+                        id: subscription.plan.product.id,
+                        title: subscription.plan.product.title,
+                    },
+                };
+            }),
+        );
 
         return { items };
     }
@@ -306,20 +292,12 @@ export class UsageService {
             };
         }
 
-        const usageAggregate = await this.prisma.usageRecord.aggregate({
-            where: {
+        const usedRequests =
+            await this.usageAggregationService.sumUsageForWindow({
                 subscriptionId: subscription.id,
-                occurredAt: {
-                    gte: usageWindow.gte,
-                    lt: usageWindow.lt,
-                },
-            },
-            _sum: {
-                requestCount: true,
-            },
-        });
-
-        const usedRequests = usageAggregate._sum.requestCount ?? 0;
+                periodStart: usageWindow.gte,
+                periodEnd: usageWindow.lt,
+            });
         const quotaRequests = subscription.plan.quotaRequests;
         const requestedRequests = input.requestCount;
         const nextUsedRequests = usedRequests + requestedRequests;
@@ -353,21 +331,22 @@ export class UsageService {
         }
 
         if (typeof rateLimitRpm === 'number') {
-            const rateLimitUsageAggregate = await this.prisma.usageRecord.aggregate({
-                where: {
-                    subscriptionId: subscription.id,
-                    occurredAt: {
-                        gte: this.getRateLimitWindowStart(
-                            occurredAt,
-                            usageWindow.gte,
-                        ),
-                        lte: occurredAt,
+            const rateLimitUsageAggregate =
+                await this.prisma.usageRecord.aggregate({
+                    where: {
+                        subscriptionId: subscription.id,
+                        occurredAt: {
+                            gte: this.getRateLimitWindowStart(
+                                occurredAt,
+                                usageWindow.gte,
+                            ),
+                            lte: occurredAt,
+                        },
                     },
-                },
-                _sum: {
-                    requestCount: true,
-                },
-            });
+                    _sum: {
+                        requestCount: true,
+                    },
+                });
 
             const usedRateLimitRequests =
                 rateLimitUsageAggregate._sum.requestCount ?? 0;
@@ -537,20 +516,15 @@ export class UsageService {
                 };
             }
 
-            const usageAggregate = await tx.usageRecord.aggregate({
-                where: {
-                    subscriptionId: subscription.id,
-                    occurredAt: {
-                        gte: usageWindow.gte,
-                        lt: usageWindow.lt,
+            const usedRequests =
+                await this.usageAggregationService.sumUsageForWindow(
+                    {
+                        subscriptionId: subscription.id,
+                        periodStart: usageWindow.gte,
+                        periodEnd: usageWindow.lt,
                     },
-                },
-                _sum: {
-                    requestCount: true,
-                },
-            });
-
-            const usedRequests = usageAggregate._sum.requestCount ?? 0;
+                    tx,
+                );
             const quotaRequests = subscription.plan.quotaRequests;
             const nextUsedRequests = usedRequests + params.requestCount;
             const rateLimitRpm = subscription.plan.rateLimitRpm ?? null;
@@ -647,13 +621,11 @@ export class UsageService {
                 );
             }
 
-            await tx.usageRecord.create({
-                data: {
-                    subscriptionId: subscription.id,
-                    occurredAt: params.occurredAt,
-                    endpoint: params.endpoint,
-                    requestCount: params.requestCount,
-                },
+            await this.usageAggregationService.recordUsageInTransaction(tx, {
+                subscriptionId: subscription.id,
+                occurredAt: params.occurredAt,
+                endpoint: params.endpoint,
+                requestCount: params.requestCount,
             });
 
             return {
@@ -684,10 +656,7 @@ export class UsageService {
         });
     }
 
-    private getRateLimitWindowStart(
-        occurredAt: Date,
-        periodStart: Date,
-    ): Date {
+    private getRateLimitWindowStart(occurredAt: Date, periodStart: Date): Date {
         const rateLimitWindowStart = new Date(
             occurredAt.getTime() - RATE_LIMIT_WINDOW_SECONDS * 1000,
         );
@@ -737,6 +706,28 @@ export class UsageService {
     }
 
     private async createUsageRecord(input: RecordUsageInput): Promise<void> {
+        const validatedRecord = await this.validateUsageRecordInput(input);
+
+        await this.usageAggregationService.recordUsage(validatedRecord);
+    }
+
+    private async enqueueUsageRecord(input: RecordUsageInput): Promise<void> {
+        const validatedRecord = await this.validateUsageRecordInput(input);
+
+        await this.prisma.usageIngestJob.create({
+            data: {
+                ...validatedRecord,
+                availableAt: new Date(),
+            },
+        });
+    }
+
+    private async validateUsageRecordInput(input: RecordUsageInput): Promise<{
+        subscriptionId: string;
+        occurredAt: Date;
+        endpoint: string;
+        requestCount: number;
+    }> {
         const subscription = await this.prisma.subscription.findUnique({
             where: { id: input.subscriptionId },
             select: {
@@ -768,20 +759,16 @@ export class UsageService {
             });
         }
 
-        await this.prisma.usageRecord.create({
-            data: {
-                subscriptionId: subscription.id,
-                occurredAt,
-                endpoint: input.endpoint,
-                requestCount: input.requestCount,
-            },
-        });
+        return {
+            subscriptionId: subscription.id,
+            occurredAt,
+            endpoint: input.endpoint,
+            requestCount: input.requestCount,
+        };
     }
 
     private assertUsageSecret(providedSecret?: string): void {
-        const secret = this.configService.getOrThrow<string>(
-            'USAGE_INGEST_SECRET',
-        );
+        const secret = this.configService.usageIngestSecret;
         if (!providedSecret || providedSecret !== secret) {
             throw new AppError({
                 code: ErrorCodes.USAGE_INGEST_FORBIDDEN,
@@ -792,7 +779,7 @@ export class UsageService {
     }
 
     private hashIncomingApiKey(rawKey: string): string {
-        const salt = this.configService.getOrThrow<string>('API_KEY_SALT');
+        const salt = this.configService.apiKeySalt;
         return hashApiKey(rawKey, salt);
     }
 }

@@ -1,8 +1,8 @@
 import { Role, SubscriptionStatus } from '@prisma/client';
-import { ConfigService } from '@nestjs/config';
-import type { Env } from '../../common/config/env.schema';
+import { AppConfigService } from '../../common/config/config.service';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { UsageAggregationService } from './usage-aggregation.service';
 import { UsageService } from './usage.service';
 
 type PrismaMock = {
@@ -19,8 +19,9 @@ type PrismaMock = {
     };
     usageRecord: {
         aggregate: jest.Mock;
+    };
+    usageIngestJob: {
         create: jest.Mock;
-        groupBy: jest.Mock;
     };
     $transaction: jest.Mock;
 };
@@ -28,7 +29,12 @@ type PrismaMock = {
 describe('UsageService', () => {
     let service: UsageService;
     let prisma: PrismaMock;
-    let configService: ConfigService<Env, true>;
+    let configService: AppConfigService;
+    let usageAggregationService: {
+        sumUsageForWindow: jest.Mock;
+        recordUsage: jest.Mock;
+        recordUsageInTransaction: jest.Mock;
+    };
     let txExecuteRaw: jest.Mock;
 
     beforeEach(() => {
@@ -47,8 +53,9 @@ describe('UsageService', () => {
             },
             usageRecord: {
                 aggregate: jest.fn(),
+            },
+            usageIngestJob: {
                 create: jest.fn(),
-                groupBy: jest.fn(),
             },
             $transaction: jest.fn(async (callback) =>
                 callback({
@@ -59,22 +66,21 @@ describe('UsageService', () => {
         };
 
         configService = {
-            getOrThrow: jest.fn((key: keyof Env) => {
-                if (key === 'USAGE_INGEST_SECRET') {
-                    return 'secret';
-                }
+            apiKeySalt: 'salt',
+            usageIngestSecret: 'secret',
+            usageIngestQueueEnabled: true,
+        } as unknown as AppConfigService;
 
-                if (key === 'API_KEY_SALT') {
-                    return 'salt';
-                }
-
-                return 'secret';
-            }),
-        } as unknown as ConfigService<Env, true>;
+        usageAggregationService = {
+            sumUsageForWindow: jest.fn(),
+            recordUsage: jest.fn(),
+            recordUsageInTransaction: jest.fn(),
+        };
 
         service = new UsageService(
             prisma as unknown as PrismaService,
             configService,
+            usageAggregationService as unknown as UsageAggregationService,
         );
     });
 
@@ -137,16 +143,10 @@ describe('UsageService', () => {
                 },
             },
         });
-        prisma.subscription.findUnique.mockResolvedValue({
-            id: 'sub-1',
-            status: SubscriptionStatus.ACTIVE,
-        });
-        prisma.usageRecord.aggregate.mockResolvedValue({
-            _sum: {
-                requestCount: 120,
-            },
-        });
-        prisma.usageRecord.create.mockResolvedValue({});
+        usageAggregationService.sumUsageForWindow.mockResolvedValue(120);
+        usageAggregationService.recordUsageInTransaction.mockResolvedValue(
+            undefined,
+        );
 
         const result = await service.authorizeUsage(
             {
@@ -160,13 +160,13 @@ describe('UsageService', () => {
             'secret',
         );
 
-        expect(prisma.usageRecord.create).toHaveBeenCalledWith({
-            data: {
-                subscriptionId: 'sub-1',
-                occurredAt: new Date('2026-01-25T10:00:00.000Z'),
-                endpoint: '/v1/search',
-                requestCount: 2,
-            },
+        expect(
+            usageAggregationService.recordUsageInTransaction,
+        ).toHaveBeenCalledWith(expect.any(Object), {
+            subscriptionId: 'sub-1',
+            occurredAt: new Date('2026-01-25T10:00:00.000Z'),
+            endpoint: '/v1/search',
+            requestCount: 2,
         });
         expect(txExecuteRaw).toHaveBeenCalled();
         expect(result).toEqual({
@@ -226,11 +226,7 @@ describe('UsageService', () => {
                 },
             },
         });
-        prisma.usageRecord.aggregate.mockResolvedValue({
-            _sum: {
-                requestCount: 50,
-            },
-        });
+        usageAggregationService.sumUsageForWindow.mockResolvedValue(50);
 
         const result = await service.authorizeGatewayUsage({
             apiKey: 'hp_valid',
@@ -280,11 +276,7 @@ describe('UsageService', () => {
                 },
             },
         });
-        prisma.usageRecord.aggregate.mockResolvedValue({
-            _sum: {
-                requestCount: 99,
-            },
-        });
+        usageAggregationService.sumUsageForWindow.mockResolvedValue(99);
 
         const result = await service.authorizeUsage(
             {
@@ -297,7 +289,6 @@ describe('UsageService', () => {
             'secret',
         );
 
-        expect(prisma.usageRecord.create).not.toHaveBeenCalled();
         expect(result).toEqual({
             allowed: false,
             reason: 'QUOTA_EXCEEDED',
@@ -356,17 +347,12 @@ describe('UsageService', () => {
                 },
             },
         });
-        prisma.usageRecord.aggregate
-            .mockResolvedValueOnce({
-                _sum: {
-                    requestCount: 100,
-                },
-            })
-            .mockResolvedValueOnce({
-                _sum: {
-                    requestCount: 60,
-                },
-            });
+        usageAggregationService.sumUsageForWindow.mockResolvedValue(100);
+        prisma.usageRecord.aggregate.mockResolvedValue({
+            _sum: {
+                requestCount: 60,
+            },
+        });
 
         const result = await service.authorizeGatewayUsage({
             apiKey: 'hp_valid',
@@ -377,7 +363,6 @@ describe('UsageService', () => {
             consume: true,
         });
 
-        expect(prisma.usageRecord.create).not.toHaveBeenCalled();
         expect(result).toEqual({
             allowed: false,
             reason: 'RATE_LIMIT_EXCEEDED',
@@ -437,11 +422,7 @@ describe('UsageService', () => {
                 },
             },
         });
-        prisma.usageRecord.aggregate.mockResolvedValue({
-            _sum: {
-                requestCount: 200,
-            },
-        });
+        usageAggregationService.sumUsageForWindow.mockResolvedValue(200);
 
         const result = await service.authorizeGatewayUsage({
             apiKey: 'hp_valid',
@@ -510,7 +491,7 @@ describe('UsageService', () => {
         });
     });
 
-    it('creates usage record on success', async () => {
+    it('enqueues usage ingest on success when the queue is enabled', async () => {
         const occurredAt = '2026-01-25T10:00:00.000Z';
         const periodStart = new Date('2026-01-01T00:00:00.000Z');
         const periodEnd = new Date('2026-02-01T00:00:00.000Z');
@@ -522,7 +503,7 @@ describe('UsageService', () => {
             currentPeriodEnd: periodEnd,
             gracePeriodEndsAt: null,
         });
-        prisma.usageRecord.create.mockResolvedValue({});
+        prisma.usageIngestJob.create.mockResolvedValue({});
 
         const result = await service.ingestUsage(
             {
@@ -534,13 +515,52 @@ describe('UsageService', () => {
             'secret',
         );
 
-        expect(prisma.usageRecord.create).toHaveBeenCalledWith({
-            data: {
+        expect(prisma.usageIngestJob.create).toHaveBeenCalledWith({
+            data: expect.objectContaining({
                 subscriptionId: 'sub-1',
                 occurredAt: new Date(occurredAt),
                 endpoint: '/v1/search',
                 requestCount: 2,
+                availableAt: expect.any(Date),
+            }),
+        });
+        expect(result).toEqual({ ok: true });
+    });
+
+    it('falls back to direct usage writes when the queue is disabled', async () => {
+        Object.assign(configService, {
+            usageIngestQueueEnabled: false,
+        });
+
+        const occurredAt = '2026-01-25T10:00:00.000Z';
+        const periodStart = new Date('2026-01-01T00:00:00.000Z');
+        const periodEnd = new Date('2026-02-01T00:00:00.000Z');
+
+        prisma.subscription.findUnique.mockResolvedValue({
+            id: 'sub-1',
+            status: SubscriptionStatus.ACTIVE,
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            gracePeriodEndsAt: null,
+        });
+        usageAggregationService.recordUsage.mockResolvedValue(undefined);
+
+        const result = await service.ingestUsage(
+            {
+                subscriptionId: 'sub-1',
+                endpoint: '/v1/search',
+                requestCount: 2,
+                occurredAt,
             },
+            'secret',
+        );
+
+        expect(prisma.usageIngestJob.create).not.toHaveBeenCalled();
+        expect(usageAggregationService.recordUsage).toHaveBeenCalledWith({
+            subscriptionId: 'sub-1',
+            occurredAt: new Date(occurredAt),
+            endpoint: '/v1/search',
+            requestCount: 2,
         });
         expect(result).toEqual({ ok: true });
     });
@@ -589,14 +609,7 @@ describe('UsageService', () => {
                 },
             },
         ]);
-        prisma.usageRecord.groupBy.mockResolvedValue([
-            {
-                subscriptionId: 'sub-1',
-                _sum: {
-                    requestCount: 120,
-                },
-            },
-        ]);
+        usageAggregationService.sumUsageForWindow.mockResolvedValue(120);
 
         const user = {
             id: 'user-1',
@@ -620,6 +633,13 @@ describe('UsageService', () => {
                     },
                 }),
             );
+            expect(
+                usageAggregationService.sumUsageForWindow,
+            ).toHaveBeenCalledWith({
+                subscriptionId: 'sub-1',
+                periodStart,
+                periodEnd,
+            });
             expect(result.items).toEqual([
                 {
                     subscriptionId: 'sub-1',
@@ -674,14 +694,7 @@ describe('UsageService', () => {
                 },
             },
         ]);
-        prisma.usageRecord.groupBy.mockResolvedValue([
-            {
-                subscriptionId: 'sub-1',
-                _sum: {
-                    requestCount: 320,
-                },
-            },
-        ]);
+        usageAggregationService.sumUsageForWindow.mockResolvedValue(320);
 
         const user = {
             id: 'user-1',

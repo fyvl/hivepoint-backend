@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+export type GatewayBodyEncoding = 'json' | 'text' | 'base64' | null;
+
 export class GatewayUsageMetaDto {
     @ApiProperty({ example: 'sub_123' })
     subscriptionId!: string;
@@ -15,6 +17,15 @@ export class GatewayUsageMetaDto {
 
     @ApiProperty({ example: 52, nullable: true })
     remainingRateLimitRequests!: number | null;
+
+    @ApiProperty({ example: 20, nullable: true })
+    burstLimit!: number | null;
+
+    @ApiProperty({ example: 14, nullable: true })
+    remainingBurstRequests!: number | null;
+
+    @ApiProperty({ example: 10, nullable: true })
+    burstWindowSeconds!: number | null;
 
     @ApiProperty({ example: true })
     usageRecorded!: boolean;
@@ -48,11 +59,18 @@ export class GatewayDispatchResponseDto {
 
     @ApiProperty({
         description:
-            'Parsed JSON body when upstream returns JSON, otherwise plain text or null.',
+            'Parsed JSON body when upstream returns JSON, plain text for textual responses, base64 string for binary responses, or null when upstream returns no body.',
         example: { status: 'ok' },
         nullable: true,
     })
     body!: unknown;
+
+    @ApiProperty({
+        example: 'json',
+        enum: ['json', 'text', 'base64'],
+        nullable: true,
+    })
+    bodyEncoding!: GatewayBodyEncoding;
 
     @ApiProperty({ type: GatewayUsageMetaDto })
     usage!: GatewayUsageMetaDto;

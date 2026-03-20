@@ -1,31 +1,37 @@
 # Usage Module
 
 ## Purpose
-Provides a minimal entitlement layer for API access: it can authorize a raw API key against an active subscription and quota for a specific product, ingest usage records, and summarize usage for the current billing period.
+
+Provides a minimal entitlement layer for API access: it can authorize a raw API key against an active subscription and quota for a specific product, accept usage ingest events, and summarize usage for the current billing period.
 
 ## Endpoints
-| Method | Path | Auth | Request DTO | Response shape | Notes |
-| --- | --- | --- | --- | --- | --- |
-| POST | `/usage/authorize` | `x-usage-secret` header | `AuthorizeUsageDto` | `AuthorizeUsageResponseDto` | Internal entitlement check by raw API key + product; can optionally record usage in the same call. |
-| POST | `/usage/record` | `x-usage-secret` header | `RecordUsageDto` | `RecordUsageResponseDto` | Internal ingestion endpoint. |
-| GET | `/usage/summary` | Bearer | None | `UsageSummaryResponseDto` | Summarizes usage for active subscriptions with a valid billing period. |
+
+| Method | Path               | Auth                    | Request DTO         | Response shape              | Notes                                                                                                                          |
+| ------ | ------------------ | ----------------------- | ------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| POST   | `/usage/authorize` | `x-usage-secret` header | `AuthorizeUsageDto` | `AuthorizeUsageResponseDto` | Internal entitlement check by raw API key + product; can optionally record usage in the same call.                             |
+| POST   | `/usage/record`    | `x-usage-secret` header | `RecordUsageDto`    | `RecordUsageResponseDto`    | Internal ingestion endpoint. When queue-backed ingest is enabled, the call validates and enqueues usage for async persistence. |
+| GET    | `/usage/summary`   | Bearer                  | None                | `UsageSummaryResponseDto`   | Summarizes usage for active subscriptions with a valid billing period.                                                         |
 
 ## Ingest security
+
 - Required header: `x-usage-secret`
 - Value must match `USAGE_INGEST_SECRET` from the environment.
 
 ## Aggregation rules
+
 - `/usage/authorize` hashes the incoming raw API key with `API_KEY_SALT`, resolves the owning user, finds an `ACTIVE` subscription for the requested product, and checks the current billing period quota.
 - Authorization returns `allowed=false` for `INVALID_API_KEY`, `NO_ACTIVE_SUBSCRIPTION`, or `QUOTA_EXCEEDED`.
 - If `consume=true`, `/usage/authorize` records usage immediately after a successful check.
+- `/usage/record` validates the subscription window before accepting the event, then either writes directly to `UsageRecord` plus `UsageDailyAggregate`, or enqueues a `UsageIngestJob` depending on `USAGE_INGEST_QUEUE_ENABLED`.
 - Only `ACTIVE` subscriptions for the current user are considered.
 - Billing period is taken from `subscription.currentPeriodStart` and `subscription.currentPeriodEnd`.
 - If either period value is `null`, that subscription is omitted from the summary.
-- `usedRequests` is the sum of `UsageRecord.requestCount` where `occurredAt >= periodStart` and `occurredAt < periodEnd`.
+- `usedRequests` is resolved through a hybrid read-model: `UsageDailyAggregate` is used for full UTC days inside the window, while boundary partial days still read directly from `UsageRecord`.
 - `percent = min(100, floor((usedRequests / quotaRequests) * 100))`.
 - Optional query filters (`subscriptionId`, `from`, `to`) are not implemented.
 
 ## Error codes
+
 - `USAGE_INGEST_FORBIDDEN`
 - `PRODUCT_NOT_FOUND`
 - `SUBSCRIPTION_NOT_FOUND`
@@ -34,8 +40,11 @@ Provides a minimal entitlement layer for API access: it can authorize a raw API 
 - `UNAUTHORIZED`
 
 ## Examples
+
 ### Authorize usage
+
 Request:
+
 ```json
 {
     "apiKey": "hp_example_api_key",
@@ -45,7 +54,9 @@ Request:
     "consume": false
 }
 ```
+
 Response:
+
 ```json
 {
     "allowed": true,
@@ -72,7 +83,11 @@ Response:
 ```
 
 ### Ingest record
+
+When `USAGE_INGEST_QUEUE_ENABLED=true`, this response means the event was accepted into the queue; persistence into `UsageRecord` is done asynchronously by the usage ingest worker.
+
 Request:
+
 ```json
 {
     "subscriptionId": "uuid",
@@ -81,7 +96,9 @@ Request:
     "occurredAt": "2026-01-25T10:00:00.000Z"
 }
 ```
+
 Response:
+
 ```json
 {
     "ok": true
@@ -89,6 +106,7 @@ Response:
 ```
 
 ### Summary response
+
 ```json
 {
     "items": [
@@ -114,12 +132,17 @@ Response:
 ```
 
 ## Implementation notes
-- Ingestion validates the header secret inside the service before creating a record.
+
+- Ingestion validates the header secret inside the service before persisting or enqueueing a record.
+- Queue-backed ingestion stores `UsageIngestJob` rows and drains them via a background worker protected by a `BackgroundJobLease`.
+- Worker persistence into `UsageRecord` is idempotent via a unique `sourceJobId`.
+- Every persisted usage record also updates a subscription-level `UsageDailyAggregate` row for the UTC day bucket.
 - Authorization checks API key hash, subscription activity, billing period, and quota in the usage service.
-- Usage aggregation uses a single `groupBy` query with OR filters across subscriptions.
+- Quota and summary reads use `UsageDailyAggregate` for full-day spans and fall back to raw `UsageRecord` scans for partial-day boundaries and any yet-unaggregated rows.
 - Summary excludes subscriptions without a billing period in the database.
 
 ## Future improvements
+
 - Support date range filters and per-endpoint breakdowns.
-- Store daily aggregates to reduce query cost.
-- Integrate ingestion with an external gateway or queue.
+- Add per-endpoint aggregates and richer seller-facing usage breakdowns.
+- Push rate-limit decisions onto a dedicated hot-path store instead of `UsageRecord` queries.
