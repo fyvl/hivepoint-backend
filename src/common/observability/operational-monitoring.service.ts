@@ -24,11 +24,14 @@ export type OperationalMetricsSnapshot = {
     usageIngestLeaseSecondsUntilExpiry: number;
     billingReconciliationLeasePresent: boolean;
     billingReconciliationLeaseSecondsUntilExpiry: number;
+    billingOverageCollectionLeasePresent: boolean;
+    billingOverageCollectionLeaseSecondsUntilExpiry: number;
     subscriptionsPastDue: number;
     auditLogsLast24h: number;
 };
 
 const BILLING_RECONCILIATION_LEASE_NAME = 'billing:stripe-reconciliation';
+const BILLING_OVERAGE_COLLECTION_LEASE_NAME = 'billing:overage-collection';
 const USAGE_INGEST_LEASE_NAME = 'usage:ingest-queue';
 const PAST_DUE_SUBSCRIPTION_WARNING_THRESHOLD = 10;
 const USAGE_QUEUE_BACKLOG_WARNING_THRESHOLD = 100;
@@ -53,6 +56,7 @@ export class OperationalMonitoringService {
             auditLogsLast24h,
             usageIngestLease,
             billingReconciliationLease,
+            billingOverageCollectionLease,
         ] = await Promise.all([
             this.prisma.usageIngestJob.count({
                 where: {
@@ -108,6 +112,17 @@ export class OperationalMonitoringService {
                       },
                   })
                 : Promise.resolve(null),
+            this.configService.paymentProvider === 'STRIPE' &&
+            this.configService.billingOverageCollectionEnabled
+                ? this.prisma.backgroundJobLease.findUnique({
+                      where: {
+                          name: BILLING_OVERAGE_COLLECTION_LEASE_NAME,
+                      },
+                      select: {
+                          expiresAt: true,
+                      },
+                  })
+                : Promise.resolve(null),
         ]);
 
         return {
@@ -136,6 +151,16 @@ export class OperationalMonitoringService {
                 billingReconciliationLease
                     ? Math.floor(
                           (billingReconciliationLease.expiresAt.getTime() -
+                              now.getTime()) /
+                              1000,
+                      )
+                    : 0,
+            billingOverageCollectionLeasePresent:
+                billingOverageCollectionLease !== null,
+            billingOverageCollectionLeaseSecondsUntilExpiry:
+                billingOverageCollectionLease
+                    ? Math.floor(
+                          (billingOverageCollectionLease.expiresAt.getTime() -
                               now.getTime()) /
                               1000,
                       )
@@ -247,6 +272,30 @@ export class OperationalMonitoringService {
                     leasePresent: snapshot.billingReconciliationLeasePresent,
                     secondsUntilExpiry:
                         snapshot.billingReconciliationLeaseSecondsUntilExpiry,
+                },
+            });
+        }
+
+        const overageCollectionLeaseExpired =
+            snapshot.billingOverageCollectionLeasePresent &&
+            snapshot.billingOverageCollectionLeaseSecondsUntilExpiry < 0;
+        if (
+            this.configService.paymentProvider === 'STRIPE' &&
+            this.configService.billingOverageCollectionEnabled &&
+            (!snapshot.billingOverageCollectionLeasePresent ||
+                overageCollectionLeaseExpired)
+        ) {
+            alerts.push({
+                kind: 'BILLING_OVERAGE_COLLECTION_STALE',
+                severity: OperationalAlertSeverity.WARNING,
+                title: 'Billing overage collection lease is stale',
+                message:
+                    'Automated overage collection is enabled but its worker lease is missing or expired.',
+                details: {
+                    leasePresent:
+                        snapshot.billingOverageCollectionLeasePresent,
+                    secondsUntilExpiry:
+                        snapshot.billingOverageCollectionLeaseSecondsUntilExpiry,
                 },
             });
         }

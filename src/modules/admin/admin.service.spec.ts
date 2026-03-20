@@ -1,6 +1,7 @@
 import { ProductStatus, Role, VersionStatus } from '@prisma/client';
 import { AuditLogService } from '../../common/observability/audit-log.service';
 import { OperationalAlertDeliveryService } from '../../common/observability/operational-alert-delivery.service';
+import { OperationalMetricsHistoryService } from '../../common/observability/operational-metrics-history.service';
 import {
     OperationalAlertSeverity,
     OperationalMonitoringService,
@@ -33,6 +34,9 @@ describe('AdminService', () => {
     };
     let operationalAlertDeliveryService: {
         getStatusSummary: jest.Mock;
+    };
+    let operationalMetricsHistoryService: {
+        getHistorySummary: jest.Mock;
     };
     let operationalMonitoringService: {
         deriveOperationalAlerts: jest.Mock;
@@ -79,6 +83,9 @@ describe('AdminService', () => {
         operationalAlertDeliveryService = {
             getStatusSummary: jest.fn(),
         };
+        operationalMetricsHistoryService = {
+            getHistorySummary: jest.fn(),
+        };
         operationalMonitoringService = {
             deriveOperationalAlerts: jest.fn(),
             getMetricsSnapshot: jest.fn(),
@@ -89,6 +96,7 @@ describe('AdminService', () => {
             prisma as unknown as PrismaService,
             auditLogService as unknown as AuditLogService,
             operationalAlertDeliveryService as unknown as OperationalAlertDeliveryService,
+            operationalMetricsHistoryService as unknown as OperationalMetricsHistoryService,
             operationalMonitoringService as unknown as OperationalMonitoringService,
         );
     });
@@ -218,6 +226,8 @@ describe('AdminService', () => {
             usageIngestLeaseSecondsUntilExpiry: 45,
             billingReconciliationLeasePresent: true,
             billingReconciliationLeaseSecondsUntilExpiry: 120,
+            billingOverageCollectionLeasePresent: true,
+            billingOverageCollectionLeaseSecondsUntilExpiry: 180,
             subscriptionsPastDue: 2,
             auditLogsLast24h: 7,
         });
@@ -232,8 +242,22 @@ describe('AdminService', () => {
         operationalAlertDeliveryService.getStatusSummary.mockResolvedValue({
             enabled: true,
             webhookConfigured: true,
+            configuredTargetCount: 1,
+            targets: [
+                {
+                    key: 'webhook',
+                    host: 'alerts.example.com',
+                },
+            ],
             intervalSeconds: 60,
             cooldownSeconds: 900,
+            items: [],
+            targetItems: [],
+        });
+        operationalMetricsHistoryService.getHistorySummary.mockResolvedValue({
+            enabled: true,
+            intervalSeconds: 300,
+            retentionDays: 30,
             items: [],
         });
 
@@ -252,7 +276,11 @@ describe('AdminService', () => {
         expect(
             operationalAlertDeliveryService.getStatusSummary,
         ).toHaveBeenCalledWith(10);
+        expect(
+            operationalMetricsHistoryService.getHistorySummary,
+        ).toHaveBeenCalledWith(48);
         expect(result.alerts).toHaveLength(1);
         expect(result.alertDelivery.enabled).toBe(true);
+        expect(result.metricsHistory.enabled).toBe(true);
     });
 });

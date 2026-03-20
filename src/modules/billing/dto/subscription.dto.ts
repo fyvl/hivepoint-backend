@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
     BillingProvider,
+    InvoiceKind,
     InvoiceStatus,
     SubscriptionStatus,
 } from '@prisma/client';
@@ -49,6 +50,9 @@ export class SubscriptionInvoiceDto {
     @ApiProperty({ example: 'uuid' })
     id!: string;
 
+    @ApiProperty({ enum: InvoiceKind })
+    kind!: InvoiceKind;
+
     @ApiProperty({ enum: InvoiceStatus })
     status!: InvoiceStatus;
 
@@ -75,6 +79,18 @@ export class SubscriptionInvoiceDto {
 
     @ApiProperty({ type: String, format: 'date-time', nullable: true })
     managedRetryExhaustedAt!: Date | null;
+
+    @ApiProperty({ type: Number, example: 1200, nullable: true })
+    overageRequests!: number | null;
+
+    @ApiProperty({ type: Number, example: 2, nullable: true })
+    overageUnits!: number | null;
+
+    @ApiProperty({ type: String, format: 'date-time' })
+    periodStart!: Date;
+
+    @ApiProperty({ type: String, format: 'date-time' })
+    periodEnd!: Date;
 
     @ApiProperty({ type: String, format: 'date-time' })
     createdAt!: Date;

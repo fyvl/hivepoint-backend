@@ -15,6 +15,6 @@ import { UsageService } from './usage.service';
         UsageIngestWorkerService,
         JwtGuard,
     ],
-    exports: [UsageService],
+    exports: [UsageService, UsageAggregationService],
 })
 export class UsageModule {}

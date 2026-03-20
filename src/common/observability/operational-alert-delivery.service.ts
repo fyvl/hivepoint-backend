@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { createHash, randomUUID } from 'crypto';
-import { AppConfigService } from '../config/config.service';
+import {
+    AlertDeliveryTargetConfig,
+    AppConfigService,
+} from '../config/config.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertSafeExternalHttpUrl } from '../utils/external-url';
 import {
@@ -34,12 +37,31 @@ type OperationalAlertStateRecord = {
     updatedAt: Date;
 };
 
+type OperationalAlertDeliveryTargetStateRecord = {
+    alertKind: string;
+    targetKey: string;
+    fingerprint: string;
+    resolvedAt: Date | null;
+    lastDeliveredAt: Date | null;
+    lastDeliveryAttemptAt: Date | null;
+    deliveryCount: number;
+    deliveryFailures: number;
+    lastDeliveryError: string | null;
+    updatedAt: Date;
+};
+
 export type OperationalAlertDeliveryStatusSummary = {
     enabled: boolean;
     webhookConfigured: boolean;
+    configuredTargetCount: number;
+    targets: Array<{
+        key: string;
+        host: string;
+    }>;
     intervalSeconds: number;
     cooldownSeconds: number;
     items: OperationalAlertStateRecord[];
+    targetItems: OperationalAlertDeliveryTargetStateRecord[];
 };
 
 @Injectable()
@@ -102,10 +124,21 @@ export class OperationalAlertDeliveryService
         const alerts = await this.operationalMonitoringService.listOperationalAlerts(
             now,
         );
+        const targets = this.configService.alertDeliveryTargets;
         const activeKinds = alerts.map((alert) => alert.kind);
         const existingStates = await this.loadRelevantStates(activeKinds);
         const statesByKind = new Map(
             existingStates.map((state) => [state.kind, state]),
+        );
+        const existingTargetStates = await this.loadRelevantTargetStates(
+            activeKinds,
+            targets.map((target) => target.key),
+        );
+        const targetStatesByKey = new Map(
+            existingTargetStates.map((state) => [
+                this.toTargetStateMapKey(state.alertKind, state.targetKey),
+                state,
+            ]),
         );
 
         let delivered = 0;
@@ -128,32 +161,68 @@ export class OperationalAlertDeliveryService
             await this.upsertObservedState(alert, fingerprint, firstObservedAt, now);
 
             if (!shouldSend) {
-                continue;
+                if (targets.length === 0) {
+                    continue;
+                }
             }
 
-            const isReminder =
-                existingState !== null &&
-                existingState.resolvedAt === null &&
-                existingState.fingerprint === fingerprint &&
-                existingState.lastDeliveredAt !== null;
-
-            try {
-                await this.deliverAlert(
-                    alert,
-                    firstObservedAt,
+            for (const target of targets) {
+                const targetState =
+                    targetStatesByKey.get(
+                        this.toTargetStateMapKey(alert.kind, target.key),
+                    ) ?? null;
+                const shouldSendToTarget = this.shouldSendNotification(
+                    targetState,
+                    fingerprint,
                     now,
-                    isReminder,
                 );
-                await this.markDeliverySuccess(alert.kind, now);
-                delivered += 1;
-            } catch (error) {
-                await this.markDeliveryFailure(alert.kind, now, error);
-                failed += 1;
-                this.logger.warn(
-                    `Failed to deliver alert ${alert.kind}: ${this.describeError(
-                        error,
-                    )}`,
-                );
+
+                if (!shouldSendToTarget) {
+                    continue;
+                }
+
+                const isReminder =
+                    targetState !== null &&
+                    targetState.resolvedAt === null &&
+                    targetState.fingerprint === fingerprint &&
+                    targetState.lastDeliveredAt !== null;
+
+                try {
+                    await this.deliverAlert(
+                        target,
+                        alert,
+                        firstObservedAt,
+                        now,
+                        isReminder,
+                    );
+                    await Promise.all([
+                        this.markDeliverySuccess(alert.kind, now),
+                        this.markTargetDeliverySuccess(
+                            alert.kind,
+                            target,
+                            fingerprint,
+                            now,
+                        ),
+                    ]);
+                    delivered += 1;
+                } catch (error) {
+                    await Promise.all([
+                        this.markDeliveryFailure(alert.kind, now, error),
+                        this.markTargetDeliveryFailure(
+                            alert.kind,
+                            target,
+                            fingerprint,
+                            now,
+                            error,
+                        ),
+                    ]);
+                    failed += 1;
+                    this.logger.warn(
+                        `Failed to deliver alert ${alert.kind} to ${target.key}: ${this.describeError(
+                            error,
+                        )}`,
+                    );
+                }
             }
         }
 
@@ -173,19 +242,31 @@ export class OperationalAlertDeliveryService
     async getStatusSummary(
         limit = 10,
     ): Promise<OperationalAlertDeliveryStatusSummary> {
-        const items = await this.prisma.operationalAlertState.findMany({
-            orderBy: [{ resolvedAt: 'asc' }, { updatedAt: 'desc' }],
-            take: Math.max(1, Math.min(limit, 100)),
-        });
+        const normalizedLimit = Math.max(1, Math.min(limit, 100));
+        const [items, targetItems] = await Promise.all([
+            this.prisma.operationalAlertState.findMany({
+                orderBy: [{ resolvedAt: 'asc' }, { updatedAt: 'desc' }],
+                take: normalizedLimit,
+            }),
+            this.prisma.operationalAlertDeliveryTargetState.findMany({
+                orderBy: [{ resolvedAt: 'asc' }, { updatedAt: 'desc' }],
+                take: normalizedLimit,
+            }),
+        ]);
+        const targets = this.configService.alertDeliveryTargets.map((target) => ({
+            key: target.key,
+            host: target.host,
+        }));
 
         return {
             enabled: this.configService.alertDeliveryEnabled,
-            webhookConfigured: Boolean(
-                this.configService.alertDeliveryWebhookUrl,
-            ),
+            webhookConfigured: targets.length > 0,
+            configuredTargetCount: targets.length,
+            targets,
             intervalSeconds: this.configService.alertDeliveryIntervalSeconds,
             cooldownSeconds: this.configService.alertDeliveryCooldownSeconds,
             items,
+            targetItems,
         };
     }
 
@@ -207,6 +288,39 @@ export class OperationalAlertDeliveryService
         }
 
         return this.prisma.operationalAlertState.findMany({
+            where: {
+                OR: clauses,
+            },
+        });
+    }
+
+    private async loadRelevantTargetStates(
+        activeKinds: string[],
+        targetKeys: string[],
+    ): Promise<OperationalAlertDeliveryTargetStateRecord[]> {
+        const clauses: Prisma.OperationalAlertDeliveryTargetStateWhereInput[] = [
+            {
+                resolvedAt: null,
+            },
+        ];
+
+        if (activeKinds.length > 0) {
+            clauses.push({
+                alertKind: {
+                    in: activeKinds,
+                },
+            });
+        }
+
+        if (targetKeys.length > 0) {
+            clauses.push({
+                targetKey: {
+                    in: targetKeys,
+                },
+            });
+        }
+
+        return this.prisma.operationalAlertDeliveryTargetState.findMany({
             where: {
                 OR: clauses,
             },
@@ -282,6 +396,80 @@ export class OperationalAlertDeliveryService
         });
     }
 
+    private async markTargetDeliverySuccess(
+        alertKind: string,
+        target: AlertDeliveryTargetConfig,
+        fingerprint: string,
+        now: Date,
+    ): Promise<void> {
+        await this.prisma.operationalAlertDeliveryTargetState.upsert({
+            where: {
+                alertKind_targetKey: {
+                    alertKind,
+                    targetKey: target.key,
+                },
+            },
+            create: {
+                alertKind,
+                targetKey: target.key,
+                fingerprint,
+                resolvedAt: null,
+                lastDeliveredAt: now,
+                lastDeliveryAttemptAt: now,
+                deliveryCount: 1,
+                deliveryFailures: 0,
+                lastDeliveryError: null,
+            },
+            update: {
+                fingerprint,
+                resolvedAt: null,
+                lastDeliveredAt: now,
+                lastDeliveryAttemptAt: now,
+                lastDeliveryError: null,
+                deliveryCount: {
+                    increment: 1,
+                },
+            },
+        });
+    }
+
+    private async markTargetDeliveryFailure(
+        alertKind: string,
+        target: AlertDeliveryTargetConfig,
+        fingerprint: string,
+        now: Date,
+        error: unknown,
+    ): Promise<void> {
+        await this.prisma.operationalAlertDeliveryTargetState.upsert({
+            where: {
+                alertKind_targetKey: {
+                    alertKind,
+                    targetKey: target.key,
+                },
+            },
+            create: {
+                alertKind,
+                targetKey: target.key,
+                fingerprint,
+                resolvedAt: null,
+                lastDeliveredAt: null,
+                lastDeliveryAttemptAt: now,
+                deliveryCount: 0,
+                deliveryFailures: 1,
+                lastDeliveryError: this.describeError(error).slice(0, 1000),
+            },
+            update: {
+                fingerprint,
+                resolvedAt: null,
+                lastDeliveryAttemptAt: now,
+                deliveryFailures: {
+                    increment: 1,
+                },
+                lastDeliveryError: this.describeError(error).slice(0, 1000),
+            },
+        });
+    }
+
     private async resolveClearedAlerts(
         existingStates: OperationalAlertStateRecord[],
         activeKinds: Set<string>,
@@ -302,6 +490,15 @@ export class OperationalAlertDeliveryService
                     resolvedAt: now,
                 },
             });
+            await this.prisma.operationalAlertDeliveryTargetState.updateMany({
+                where: {
+                    alertKind: state.kind,
+                    resolvedAt: null,
+                },
+                data: {
+                    resolvedAt: now,
+                },
+            });
             resolved += 1;
         }
 
@@ -309,7 +506,16 @@ export class OperationalAlertDeliveryService
     }
 
     private shouldSendNotification(
-        state: OperationalAlertStateRecord | null,
+        state:
+            | Pick<
+                  OperationalAlertStateRecord,
+                  'resolvedAt' | 'fingerprint' | 'lastDeliveredAt'
+              >
+            | Pick<
+                  OperationalAlertDeliveryTargetStateRecord,
+                  'resolvedAt' | 'fingerprint' | 'lastDeliveredAt'
+              >
+            | null,
         fingerprint: string,
         now: Date,
     ): boolean {
@@ -356,17 +562,13 @@ export class OperationalAlertDeliveryService
     }
 
     private async deliverAlert(
+        target: AlertDeliveryTargetConfig,
         alert: OperationalAlert,
         firstObservedAt: Date,
         now: Date,
         isReminder: boolean,
     ): Promise<void> {
-        const webhookUrl = this.configService.alertDeliveryWebhookUrl;
-        if (!webhookUrl) {
-            throw new Error('Alert delivery webhook URL is not configured');
-        }
-
-        const safeUrl = await assertSafeExternalHttpUrl(webhookUrl, {
+        const safeUrl = await assertSafeExternalHttpUrl(target.url, {
             allowPrivateNetworkTargets:
                 this.configService.allowPrivateNetworkTargets,
             message: 'ALERT_DELIVERY_WEBHOOK_URL_NOT_ALLOWED',
@@ -387,6 +589,7 @@ export class OperationalAlertDeliveryService
                 body: JSON.stringify({
                     event: isReminder ? 'ALERT_REMINDER' : 'ALERT_ACTIVE',
                     source: 'hivepoint-backend',
+                    target: target.key,
                     generatedAt: now.toISOString(),
                     alert: {
                         ...alert,
@@ -494,7 +697,7 @@ export class OperationalAlertDeliveryService
     private shouldRun(): boolean {
         return (
             this.configService.alertDeliveryEnabled &&
-            Boolean(this.configService.alertDeliveryWebhookUrl)
+            this.configService.alertDeliveryTargets.length > 0
         );
     }
 
@@ -538,5 +741,9 @@ export class OperationalAlertDeliveryService
         }
 
         return 'Unknown alert delivery error';
+    }
+
+    private toTargetStateMapKey(alertKind: string, targetKey: string): string {
+        return `${alertKind}:${targetKey}`;
     }
 }

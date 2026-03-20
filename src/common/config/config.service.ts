@@ -2,6 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Env } from './env.schema';
 
+export type AlertDeliveryTargetConfig = {
+    key: string;
+    url: string;
+    host: string;
+};
+
 @Injectable()
 export class AppConfigService {
     constructor(private readonly configService: ConfigService<Env, true>) {}
@@ -120,6 +126,24 @@ export class AppConfigService {
         );
     }
 
+    get billingOverageCollectionEnabled(): boolean {
+        return this.configService.getOrThrow(
+            'BILLING_OVERAGE_COLLECTION_ENABLED',
+        );
+    }
+
+    get billingOverageCollectionIntervalSeconds(): number {
+        return this.configService.getOrThrow(
+            'BILLING_OVERAGE_COLLECTION_INTERVAL_SECONDS',
+        );
+    }
+
+    get billingOverageCollectionBatchSize(): number {
+        return this.configService.getOrThrow(
+            'BILLING_OVERAGE_COLLECTION_BATCH_SIZE',
+        );
+    }
+
     get apiKeySalt(): string {
         return this.configService.getOrThrow('API_KEY_SALT');
     }
@@ -150,6 +174,38 @@ export class AppConfigService {
         return this.configService.get('ALERT_DELIVERY_WEBHOOK_URL');
     }
 
+    get alertDeliveryTargets(): AlertDeliveryTargetConfig[] {
+        const targets: AlertDeliveryTargetConfig[] = [];
+        const legacyWebhookUrl = this.alertDeliveryWebhookUrl;
+        if (legacyWebhookUrl) {
+            targets.push({
+                key: 'webhook',
+                url: legacyWebhookUrl,
+                host: new URL(legacyWebhookUrl).host,
+            });
+        }
+
+        const configuredTargets =
+            this.configService.getOrThrow('ALERT_DELIVERY_TARGETS');
+        configuredTargets.forEach(
+            (target: Env['ALERT_DELIVERY_TARGETS'][number]) => {
+            if (targets.some((item) => item.key === target.key)) {
+                throw new Error(
+                    `Duplicate alert delivery target key: ${target.key}`,
+                );
+            }
+
+            targets.push({
+                key: target.key,
+                url: target.url,
+                host: new URL(target.url).host,
+            });
+            },
+        );
+
+        return targets;
+    }
+
     get alertDeliveryIntervalSeconds(): number {
         return this.configService.getOrThrow('ALERT_DELIVERY_INTERVAL_SECONDS');
     }
@@ -160,6 +216,24 @@ export class AppConfigService {
 
     get alertDeliveryTimeoutMs(): number {
         return this.configService.getOrThrow('ALERT_DELIVERY_TIMEOUT_MS');
+    }
+
+    get operationalMetricsHistoryEnabled(): boolean {
+        return this.configService.getOrThrow(
+            'OPERATIONAL_METRICS_HISTORY_ENABLED',
+        );
+    }
+
+    get operationalMetricsHistoryIntervalSeconds(): number {
+        return this.configService.getOrThrow(
+            'OPERATIONAL_METRICS_HISTORY_INTERVAL_SECONDS',
+        );
+    }
+
+    get operationalMetricsHistoryRetentionDays(): number {
+        return this.configService.getOrThrow(
+            'OPERATIONAL_METRICS_HISTORY_RETENTION_DAYS',
+        );
     }
 
     get gatewayUpstreamTimeoutMs(): number {

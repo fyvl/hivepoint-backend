@@ -10,6 +10,7 @@ export type CreatePaymentParams = {
     productTitle: string;
     amountCents: number;
     currency: string;
+    setupOnly?: boolean;
 };
 
 export type CreatePaymentResult = {
@@ -52,6 +53,18 @@ export type RetryInvoicePaymentResult = {
     nextPaymentAttemptAt?: Date | null;
 };
 
+export type CreateManagedInvoiceParams = {
+    invoiceId: string;
+    externalSubscriptionId?: string;
+    userId: string;
+    userEmail: string;
+    amountCents: number;
+    currency: string;
+    description: string;
+    periodStart: Date;
+    periodEnd: Date;
+};
+
 export interface PaymentProvider {
     readonly provider: BillingProviderName;
 
@@ -67,6 +80,10 @@ export interface PaymentProvider {
 
     retryInvoicePayment(
         params: RetryInvoicePaymentParams,
+    ): Promise<RetryInvoicePaymentResult>;
+
+    createManagedInvoice(
+        params: CreateManagedInvoiceParams,
     ): Promise<RetryInvoicePaymentResult>;
 }
 

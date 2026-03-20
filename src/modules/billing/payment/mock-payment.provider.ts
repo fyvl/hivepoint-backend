@@ -6,6 +6,7 @@ import { ErrorCodes } from '../../../common/errors/error.codes';
 import type {
     CreateCustomerPortalSessionParams,
     CreateCustomerPortalSessionResult,
+    CreateManagedInvoiceParams,
     CreatePaymentParams,
     CreatePaymentResult,
     PaymentProvider,
@@ -51,6 +52,17 @@ export class MockPaymentProvider implements PaymentProvider {
 
     retryInvoicePayment(
         params: RetryInvoicePaymentParams,
+    ): Promise<RetryInvoicePaymentResult> {
+        void params;
+        throw new AppError({
+            code: ErrorCodes.PAYMENT_PROVIDER_NOT_ENABLED,
+            message: 'PAYMENT_PROVIDER_NOT_ENABLED',
+            httpStatus: 400,
+        });
+    }
+
+    createManagedInvoice(
+        params: CreateManagedInvoiceParams,
     ): Promise<RetryInvoicePaymentResult> {
         void params;
         throw new AppError({

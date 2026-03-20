@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
     BillingProvider,
+    InvoiceKind,
     InvoiceStatus,
     Prisma,
     ProductStatus,
@@ -94,6 +95,7 @@ export class SubscriptionsService {
         const items: SubscriptionDto[] = subscriptions.map((subscription) => {
             const invoices = subscription.invoices.map((invoice) => ({
                 id: invoice.id,
+                kind: invoice.kind,
                 status: invoice.status,
                 amountCents: invoice.amountCents,
                 currency: invoice.currency,
@@ -103,6 +105,10 @@ export class SubscriptionsService {
                 managedNextRetryAt: invoice.managedNextRetryAt,
                 managedLastRetryAt: invoice.managedLastRetryAt,
                 managedRetryExhaustedAt: invoice.managedRetryExhaustedAt,
+                overageRequests: invoice.overageRequests,
+                overageUnits: invoice.overageUnits,
+                periodStart: invoice.periodStart,
+                periodEnd: invoice.periodEnd,
                 createdAt: invoice.createdAt,
             }));
 
@@ -426,6 +432,9 @@ export class SubscriptionsService {
                 productTitle: plan.product.title,
                 amountCents: plan.priceCents,
                 currency: plan.currency,
+                setupOnly:
+                    this.activePaymentProvider.provider === 'STRIPE' &&
+                    plan.priceCents === 0,
             });
 
             if (payment.externalPaymentId) {
@@ -629,6 +638,7 @@ export class SubscriptionsService {
             where: { id: params.invoiceId },
             select: {
                 id: true,
+                kind: true,
                 status: true,
                 externalCheckoutSessionId: true,
                 externalInvoiceId: true,
@@ -687,6 +697,10 @@ export class SubscriptionsService {
             },
         });
 
+        if (invoice.kind === InvoiceKind.OVERAGE) {
+            return { ok: true };
+        }
+
         await this.prisma.subscription.update({
             where: { id: invoice.subscription.id },
             data: {
@@ -720,6 +734,7 @@ export class SubscriptionsService {
             where: { id: params.invoiceId },
             select: {
                 id: true,
+                kind: true,
                 status: true,
                 externalInvoiceId: true,
                 externalCheckoutSessionId: true,
@@ -761,6 +776,7 @@ export class SubscriptionsService {
 
         const invoiceStatus = params.invoiceStatus ?? InvoiceStatus.VOID;
         const managedRetryState = this.resolveManagedRetryState({
+            invoiceKind: invoice.kind,
             paymentProvider: params.paymentProvider,
             invoiceStatus,
             currentInvoiceStatus: invoice.status,
@@ -798,6 +814,10 @@ export class SubscriptionsService {
                 ...(managedRetryState ?? {}),
             },
         });
+
+        if (invoice.kind === InvoiceKind.OVERAGE) {
+            return { ok: true };
+        }
 
         await this.prisma.subscription.update({
             where: { id: invoice.subscription.id },
@@ -949,6 +969,7 @@ export class SubscriptionsService {
     }
 
     private resolveManagedRetryState(params: {
+        invoiceKind: InvoiceKind;
         paymentProvider: BillingProviderName;
         invoiceStatus: InvoiceStatus;
         currentInvoiceStatus: InvoiceStatus;
@@ -957,6 +978,7 @@ export class SubscriptionsService {
     }): ReturnType<typeof clearManagedRetryState> | null {
         if (
             !this.shouldUseManagedRenewalRetry({
+                invoiceKind: params.invoiceKind,
                 paymentProvider: params.paymentProvider,
                 invoiceStatus: params.invoiceStatus,
                 currentPeriodStart: params.currentPeriodStart,
@@ -981,12 +1003,14 @@ export class SubscriptionsService {
     }
 
     private shouldUseManagedRenewalRetry(params: {
+        invoiceKind: InvoiceKind;
         paymentProvider: BillingProviderName;
         invoiceStatus: InvoiceStatus;
         currentPeriodStart?: Date | null;
     }): boolean {
         return (
             this.configService.billingManagedRetryEnabled &&
+            params.invoiceKind === InvoiceKind.SUBSCRIPTION &&
             params.paymentProvider === 'STRIPE' &&
             params.invoiceStatus === InvoiceStatus.PAST_DUE &&
             Boolean(params.currentPeriodStart)

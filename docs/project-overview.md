@@ -10,19 +10,18 @@ HivePoint is a NestJS backend for a marketplace of API products. It supports use
 
 - User registration, login, refresh, logout.
 - Product catalog with seller and admin management.
-- Plans, subscriptions, mock payments, Stripe Checkout with webhook sync, managed renewal retries, renewal state sync, and customer billing portal.
+- Plans, subscriptions, mock payments, Stripe Checkout with webhook sync, managed renewal retries, automated overage settlement/collection, local pay-per-use renewals for zero-base Stripe plans, renewal state sync, and customer billing portal.
 - API key issuance and revocation.
 - Usage authorization by API key, gateway dispatch/proxying, usage ingestion, quota summaries, and buyer alerts.
 - Seller analytics over product views, subscriptions, failed billing events, and top endpoints.
-- Request tracing via `x-request-id`, structured HTTP request logs, Prometheus-style metrics, operational alerts, and admin audit logs.
+- Request tracing via `x-request-id`, structured HTTP request logs, Prometheus-style metrics, persisted operational metrics history, multi-target operational alerts, and admin audit logs.
 - Swagger/OpenAPI documentation.
 
 **Still out of scope (`Production` backlog)**
 
 - Customizable gateway rate policies beyond the current RPM-derived shared burst limiter, plus fuller reverse-proxy streaming support.
-- Automated invoicing/collection for overage and pure pay-per-use billing policies.
 - Richer historical usage filters and seller-facing drill-downs beyond the current subscription-level and per-endpoint daily aggregates.
-- Long-term metrics storage, richer dashboard drill-downs, and multi-sink external alert routing beyond the current admin ops dashboard plus webhook delivery.
+- Richer operational drill-downs, external incident-provider integrations beyond webhook fan-out, and deeper historical analytics on top of the current persisted metrics history.
 
 ## Tech stack
 
@@ -54,7 +53,7 @@ HivePoint is a modular monolith: each domain lives in its own Nest module, but a
 - **Usage metering**: internal usage records per subscription, queue-backed ingestion for async persistence, subscription-level and per-endpoint daily aggregates used by quota and summary reads, and projected overage calculations for overage-enabled plans.
 - **ProductView / seller analytics**: product detail reads are tracked and aggregated into seller-facing beta analytics.
 - **Buyer alerts**: billing and usage state are materialized into buyer-facing alerts for quota pressure, active overage, renewals, payment issues, and new API versions.
-- **Observability**: every HTTP request gets a request ID, structured request log entry, and in-memory HTTP metrics; `GET /metrics` exposes Prometheus-style metrics; `GET /admin/ops/dashboard` surfaces the operational metrics snapshot, derived alerts, and alert delivery status; active alerts can be pushed to an external webhook with reminder cooldown; and admin moderation actions are persisted to `AuditLog`.
+- **Observability**: every HTTP request gets a request ID, structured request log entry, and in-memory HTTP metrics; `GET /metrics` exposes Prometheus-style metrics; background workers persist operational metrics history and manage multi-target alert fan-out; `GET /admin/ops/dashboard` surfaces the live operational snapshot, persisted history, derived alerts, and alert-delivery status; and admin moderation actions are persisted to `AuditLog`.
 
 ## Security model
 
@@ -118,7 +117,7 @@ How to run:
 ## Roadmap
 
 - Async usage pipeline (ingest -> queue -> aggregation).
-- Long-term observability storage, richer ops drill-downs, multi-sink alert routing, and broader ops tooling on top of the current metrics, traces, webhook delivery, and audit logs.
+- Richer ops drill-downs, incident-provider integrations on top of webhook fan-out, and broader ops tooling on top of the current metrics, traces, persisted history, alert delivery, and audit logs.
 - Admin UI and seller ops UI.
 - Broader reverse-proxy streaming support and customizable gateway rate policies beyond the current shared burst limiter.
 

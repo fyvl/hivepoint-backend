@@ -252,20 +252,20 @@ export class BillingReconciliationService
             return;
         }
 
-        const invoiceMetadata =
-            this.extractInvoiceSubscriptionDetails(latestInvoice)?.metadata ??
-            subscription.metadata ??
-            null;
-        const allowMetadataInvoiceId =
-            this.shouldAllowMetadataInvoiceId(latestInvoice);
+        const allowMetadataInvoiceId = this.shouldAllowMetadataInvoiceId(
+            latestInvoice,
+        );
+        const metadataInvoiceId = this.resolveMetadataInvoiceId(
+            latestInvoice,
+            subscription.metadata ?? null,
+            allowMetadataInvoiceId,
+        );
 
         await this.subscriptionsService.syncInvoiceFromExternal({
             paymentProvider: 'STRIPE',
             externalInvoiceId: latestInvoice.id,
             externalSubscriptionId: subscription.id,
-            metadataInvoiceId: allowMetadataInvoiceId
-                ? invoiceMetadata?.invoiceId
-                : undefined,
+            metadataInvoiceId,
             allowMetadataInvoiceId,
             amountCents: latestInvoice.total,
             currency: latestInvoice.currency.toUpperCase(),
@@ -344,9 +344,31 @@ export class BillingReconciliationService
 
     private shouldAllowMetadataInvoiceId(invoice: Stripe.Invoice): boolean {
         return (
+            Boolean(invoice.metadata?.invoiceId) ||
             invoice.billing_reason === 'subscription' ||
             invoice.billing_reason === 'subscription_create'
         );
+    }
+
+    private resolveMetadataInvoiceId(
+        invoice: Stripe.Invoice,
+        subscriptionMetadata: Record<string, string> | null,
+        allowMetadataInvoiceId: boolean,
+    ): string | undefined {
+        if (invoice.metadata?.invoiceId) {
+            return invoice.metadata.invoiceId;
+        }
+
+        const invoiceDetails = this.extractInvoiceSubscriptionDetails(invoice);
+        if (invoiceDetails?.metadata?.invoiceId) {
+            return invoiceDetails.metadata.invoiceId;
+        }
+
+        if (!allowMetadataInvoiceId) {
+            return undefined;
+        }
+
+        return subscriptionMetadata?.invoiceId;
     }
 
     private shouldRun(): boolean {

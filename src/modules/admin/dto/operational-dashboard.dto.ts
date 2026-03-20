@@ -23,6 +23,12 @@ export class OperationalMetricsSnapshotDto {
     @ApiProperty({ example: 180 })
     billingReconciliationLeaseSecondsUntilExpiry!: number;
 
+    @ApiProperty({ example: true })
+    billingOverageCollectionLeasePresent!: boolean;
+
+    @ApiProperty({ example: 180 })
+    billingOverageCollectionLeaseSecondsUntilExpiry!: number;
+
     @ApiProperty({ example: 4 })
     subscriptionsPastDue!: number;
 
@@ -76,12 +82,58 @@ export class OperationalAlertDeliveryStateDto {
     lastDeliveryError!: string | null;
 }
 
+export class OperationalAlertDeliveryTargetDto {
+    @ApiProperty({ example: 'webhook' })
+    key!: string;
+
+    @ApiProperty({ example: 'alerts.example.com' })
+    host!: string;
+}
+
+export class OperationalAlertDeliveryTargetStateDto {
+    @ApiProperty({ example: 'USAGE_INGEST_FAILED_JOBS' })
+    alertKind!: string;
+
+    @ApiProperty({ example: 'webhook' })
+    targetKey!: string;
+
+    @ApiProperty({ type: String, format: 'date-time', nullable: true })
+    resolvedAt!: Date | null;
+
+    @ApiProperty({ type: String, format: 'date-time', nullable: true })
+    lastDeliveredAt!: Date | null;
+
+    @ApiProperty({ type: String, format: 'date-time', nullable: true })
+    lastDeliveryAttemptAt!: Date | null;
+
+    @ApiProperty({ example: 2 })
+    deliveryCount!: number;
+
+    @ApiProperty({ example: 1 })
+    deliveryFailures!: number;
+
+    @ApiProperty({
+        example: 'Webhook responded with 500',
+        nullable: true,
+    })
+    lastDeliveryError!: string | null;
+}
+
 export class OperationalAlertDeliveryStatusDto {
     @ApiProperty({ example: true })
     enabled!: boolean;
 
     @ApiProperty({ example: true })
     webhookConfigured!: boolean;
+
+    @ApiProperty({ example: 2 })
+    configuredTargetCount!: number;
+
+    @ApiProperty({ type: [OperationalAlertDeliveryTargetDto] })
+    targets!: Array<{
+        key: string;
+        host: string;
+    }>;
 
     @ApiProperty({ example: 60 })
     intervalSeconds!: number;
@@ -91,6 +143,37 @@ export class OperationalAlertDeliveryStatusDto {
 
     @ApiProperty({ type: [OperationalAlertDeliveryStateDto] })
     items!: OperationalAlertDeliveryStateDto[];
+
+    @ApiProperty({ type: [OperationalAlertDeliveryTargetStateDto] })
+    targetItems!: Array<{
+        alertKind: string;
+        targetKey: string;
+        resolvedAt: Date | null;
+        lastDeliveredAt: Date | null;
+        lastDeliveryAttemptAt: Date | null;
+        deliveryCount: number;
+        deliveryFailures: number;
+        lastDeliveryError: string | null;
+    }>;
+}
+
+export class OperationalMetricsHistoryPointDto extends OperationalMetricsSnapshotDto {
+    @ApiProperty({ type: String, format: 'date-time' })
+    capturedAt!: Date;
+}
+
+export class OperationalMetricsHistoryStatusDto {
+    @ApiProperty({ example: true })
+    enabled!: boolean;
+
+    @ApiProperty({ example: 300 })
+    intervalSeconds!: number;
+
+    @ApiProperty({ example: 30 })
+    retentionDays!: number;
+
+    @ApiProperty({ type: [OperationalMetricsHistoryPointDto] })
+    items!: OperationalMetricsHistoryPointDto[];
 }
 
 export class OperationalDashboardResponseDto {
@@ -102,4 +185,7 @@ export class OperationalDashboardResponseDto {
 
     @ApiProperty({ type: OperationalAlertDeliveryStatusDto })
     alertDelivery!: OperationalAlertDeliveryStatusDto;
+
+    @ApiProperty({ type: OperationalMetricsHistoryStatusDto })
+    metricsHistory!: OperationalMetricsHistoryStatusDto;
 }

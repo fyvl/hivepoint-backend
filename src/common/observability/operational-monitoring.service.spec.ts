@@ -48,6 +48,7 @@ describe('OperationalMonitoringService', () => {
             usageIngestQueueIntervalSeconds: 10,
             paymentProvider: 'STRIPE',
             billingReconciliationEnabled: true,
+            billingOverageCollectionEnabled: true,
         } as unknown as AppConfigService;
 
         service = new OperationalMonitoringService(
@@ -73,6 +74,9 @@ describe('OperationalMonitoringService', () => {
             })
             .mockResolvedValueOnce({
                 expiresAt: new Date('2026-03-19T12:05:00.000Z'),
+            })
+            .mockResolvedValueOnce({
+                expiresAt: new Date('2026-03-19T12:03:00.000Z'),
             });
 
         const snapshot = await service.getMetricsSnapshot(now);
@@ -85,6 +89,8 @@ describe('OperationalMonitoringService', () => {
             usageIngestLeaseSecondsUntilExpiry: 60,
             billingReconciliationLeasePresent: true,
             billingReconciliationLeaseSecondsUntilExpiry: 300,
+            billingOverageCollectionLeasePresent: true,
+            billingOverageCollectionLeaseSecondsUntilExpiry: 180,
             subscriptionsPastDue: 4,
             auditLogsLast24h: 7,
         });
@@ -105,6 +111,7 @@ describe('OperationalMonitoringService', () => {
             .mockResolvedValueOnce({
                 expiresAt: new Date('2026-03-19T11:59:00.000Z'),
             })
+            .mockResolvedValueOnce(null)
             .mockResolvedValueOnce(null);
 
         const alerts = await service.listOperationalAlerts(now);
@@ -131,6 +138,10 @@ describe('OperationalMonitoringService', () => {
                     kind: 'BILLING_RECONCILIATION_STALE',
                     severity: OperationalAlertSeverity.WARNING,
                 }),
+                expect.objectContaining({
+                    kind: 'BILLING_OVERAGE_COLLECTION_STALE',
+                    severity: OperationalAlertSeverity.WARNING,
+                }),
             ]),
         );
     });
@@ -146,6 +157,9 @@ describe('OperationalMonitoringService', () => {
         prisma.auditLog.count.mockResolvedValue(1);
         prisma.backgroundJobLease.findUnique
             .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce({
+                expiresAt: new Date('2026-03-19T12:05:00.000Z'),
+            })
             .mockResolvedValueOnce({
                 expiresAt: new Date('2026-03-19T12:05:00.000Z'),
             });

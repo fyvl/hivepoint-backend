@@ -19,6 +19,11 @@ type PrismaMock = {
         upsert: jest.Mock;
         update: jest.Mock;
     };
+    operationalAlertDeliveryTargetState: {
+        findMany: jest.Mock;
+        upsert: jest.Mock;
+        updateMany: jest.Mock;
+    };
     $transaction: jest.Mock;
 };
 
@@ -66,6 +71,11 @@ describe('OperationalAlertDeliveryService', () => {
                 upsert: jest.fn(),
                 update: jest.fn(),
             },
+            operationalAlertDeliveryTargetState: {
+                findMany: jest.fn(),
+                upsert: jest.fn(),
+                updateMany: jest.fn(),
+            },
             $transaction: jest.fn(async (callback) =>
                 callback({
                     backgroundJobLease: prisma.backgroundJobLease,
@@ -76,6 +86,13 @@ describe('OperationalAlertDeliveryService', () => {
         configService = {
             alertDeliveryEnabled: true,
             alertDeliveryWebhookUrl: 'https://alerts.example.com/webhook',
+            alertDeliveryTargets: [
+                {
+                    key: 'webhook',
+                    url: 'https://alerts.example.com/webhook',
+                    host: 'alerts.example.com',
+                },
+            ],
             alertDeliveryIntervalSeconds: 60,
             alertDeliveryCooldownSeconds: 900,
             alertDeliveryTimeoutMs: 5_000,
@@ -108,6 +125,10 @@ describe('OperationalAlertDeliveryService', () => {
         prisma.operationalAlertState.findMany.mockResolvedValue([]);
         prisma.operationalAlertState.upsert.mockResolvedValue({});
         prisma.operationalAlertState.update.mockResolvedValue({});
+        prisma.operationalAlertDeliveryTargetState.findMany.mockResolvedValue(
+            [],
+        );
+        prisma.operationalAlertDeliveryTargetState.upsert.mockResolvedValue({});
         operationalMonitoringService.listOperationalAlerts.mockResolvedValue([
             alert,
         ]);
@@ -170,6 +191,20 @@ describe('OperationalAlertDeliveryService', () => {
                 updatedAt: lastDeliveredAt,
             },
         ]);
+        prisma.operationalAlertDeliveryTargetState.findMany.mockResolvedValue([
+            {
+                alertKind: alert.kind,
+                targetKey: 'webhook',
+                fingerprint: buildFingerprint(alert.details),
+                resolvedAt: null,
+                lastDeliveredAt,
+                lastDeliveryAttemptAt: lastDeliveredAt,
+                deliveryCount: 1,
+                deliveryFailures: 0,
+                lastDeliveryError: null,
+                updatedAt: lastDeliveredAt,
+            },
+        ]);
         prisma.operationalAlertState.upsert.mockResolvedValue({});
         operationalMonitoringService.listOperationalAlerts.mockResolvedValue([
             alert,
@@ -200,6 +235,10 @@ describe('OperationalAlertDeliveryService', () => {
         prisma.operationalAlertState.findMany.mockResolvedValue([]);
         prisma.operationalAlertState.upsert.mockResolvedValue({});
         prisma.operationalAlertState.update.mockResolvedValue({});
+        prisma.operationalAlertDeliveryTargetState.findMany.mockResolvedValue(
+            [],
+        );
+        prisma.operationalAlertDeliveryTargetState.upsert.mockResolvedValue({});
         operationalMonitoringService.listOperationalAlerts.mockResolvedValue([
             alert,
         ]);
@@ -250,7 +289,24 @@ describe('OperationalAlertDeliveryService', () => {
                 updatedAt: new Date('2026-03-20T08:30:00.000Z'),
             },
         ]);
+        prisma.operationalAlertDeliveryTargetState.findMany.mockResolvedValue([
+            {
+                alertKind: alert.kind,
+                targetKey: 'webhook',
+                fingerprint: buildFingerprint(alert.details),
+                resolvedAt: null,
+                lastDeliveredAt: new Date('2026-03-20T08:05:00.000Z'),
+                lastDeliveryAttemptAt: new Date('2026-03-20T08:05:00.000Z'),
+                deliveryCount: 1,
+                deliveryFailures: 0,
+                lastDeliveryError: null,
+                updatedAt: new Date('2026-03-20T08:30:00.000Z'),
+            },
+        ]);
         prisma.operationalAlertState.update.mockResolvedValue({});
+        prisma.operationalAlertDeliveryTargetState.updateMany.mockResolvedValue({
+            count: 1,
+        });
         operationalMonitoringService.listOperationalAlerts.mockResolvedValue([]);
 
         const result = await service.syncOperationalAlerts(now);
@@ -291,15 +347,95 @@ describe('OperationalAlertDeliveryService', () => {
                 updatedAt: new Date('2026-03-20T08:30:00.000Z'),
             },
         ]);
+        prisma.operationalAlertDeliveryTargetState.findMany.mockResolvedValue([
+            {
+                alertKind: alert.kind,
+                targetKey: 'webhook',
+                fingerprint: buildFingerprint(alert.details),
+                resolvedAt: null,
+                lastDeliveredAt: new Date('2026-03-20T08:05:00.000Z'),
+                lastDeliveryAttemptAt: new Date('2026-03-20T08:05:00.000Z'),
+                deliveryCount: 1,
+                deliveryFailures: 0,
+                lastDeliveryError: null,
+                updatedAt: new Date('2026-03-20T08:30:00.000Z'),
+            },
+        ]);
 
         const result = await service.getStatusSummary(5);
 
-        expect(prisma.operationalAlertState.findMany).toHaveBeenCalledWith({
+        expect(prisma.operationalAlertState.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                orderBy: [{ resolvedAt: 'asc' }, { updatedAt: 'desc' }],
+                take: 5,
+            }),
+        );
+        expect(
+            prisma.operationalAlertDeliveryTargetState.findMany,
+        ).toHaveBeenCalledWith({
             orderBy: [{ resolvedAt: 'asc' }, { updatedAt: 'desc' }],
             take: 5,
         });
         expect(result.enabled).toBe(true);
         expect(result.webhookConfigured).toBe(true);
+        expect(result.configuredTargetCount).toBe(1);
+        expect(result.targets).toEqual([
+            {
+                key: 'webhook',
+                host: 'alerts.example.com',
+            },
+        ]);
         expect(result.items).toHaveLength(1);
+        expect(result.targetItems).toHaveLength(1);
+    });
+
+    it('fans out alert delivery to every configured target', async () => {
+        const now = new Date('2026-03-20T09:00:00.000Z');
+
+        configService = {
+            ...configService,
+            alertDeliveryTargets: [
+                {
+                    key: 'primary',
+                    url: 'https://alerts.example.com/webhook',
+                    host: 'alerts.example.com',
+                },
+                {
+                    key: 'backup',
+                    url: 'https://backup.example.com/webhook',
+                    host: 'backup.example.com',
+                },
+            ],
+        } as AppConfigService;
+        service = new OperationalAlertDeliveryService(
+            prisma as unknown as PrismaService,
+            configService,
+            operationalMonitoringService as unknown as OperationalMonitoringService,
+        );
+
+        prisma.backgroundJobLease.findUnique.mockResolvedValue(null);
+        prisma.backgroundJobLease.create.mockResolvedValue({});
+        prisma.operationalAlertState.findMany.mockResolvedValue([]);
+        prisma.operationalAlertState.upsert.mockResolvedValue({});
+        prisma.operationalAlertState.update.mockResolvedValue({});
+        prisma.operationalAlertDeliveryTargetState.findMany.mockResolvedValue(
+            [],
+        );
+        prisma.operationalAlertDeliveryTargetState.upsert.mockResolvedValue({});
+        operationalMonitoringService.listOperationalAlerts.mockResolvedValue([
+            alert,
+        ]);
+        fetchMock.mockResolvedValue({
+            ok: true,
+        });
+
+        const result = await service.syncOperationalAlerts(now);
+
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(result).toEqual({
+            delivered: 2,
+            failed: 0,
+            resolved: 0,
+        });
     });
 });

@@ -42,6 +42,35 @@ const intArrayFromCsv = z.preprocess((value) => {
         .map((item) => Number.parseInt(item, 10));
 }, z.array(z.number().int().positive()).default([60, 360, 1440]));
 
+const alertDeliveryTargetsFromString = z.preprocess((value) => {
+    if (Array.isArray(value)) {
+        return value;
+    }
+
+    if (typeof value !== 'string') {
+        return value;
+    }
+
+    return value
+        .split(/[\r\n,;]+/)
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0)
+        .map((item) => {
+            const separatorIndex = item.indexOf('=');
+            if (separatorIndex < 0) {
+                return {
+                    key: '',
+                    url: item,
+                };
+            }
+
+            return {
+                key: item.slice(0, separatorIndex).trim(),
+                url: item.slice(separatorIndex + 1).trim(),
+            };
+        });
+}, z.array(z.object({ key: z.string().min(1), url: z.string().url() })).default([]));
+
 export const envSchema = z
     .object({
         PORT: z.coerce.number().int().positive().default(3000),
@@ -104,6 +133,17 @@ export const envSchema = z
             .positive()
             .default(25),
         BILLING_MANAGED_RETRY_DELAYS_MINUTES: intArrayFromCsv,
+        BILLING_OVERAGE_COLLECTION_ENABLED: booleanFromString.default(true),
+        BILLING_OVERAGE_COLLECTION_INTERVAL_SECONDS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(300),
+        BILLING_OVERAGE_COLLECTION_BATCH_SIZE: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(25),
         API_KEY_SALT: z.string().min(1),
         USAGE_INGEST_SECRET: z.string().min(1),
         USAGE_INGEST_QUEUE_ENABLED: booleanFromString.default(true),
@@ -122,6 +162,7 @@ export const envSchema = z
             emptyToUndefined,
             z.string().url().optional(),
         ),
+        ALERT_DELIVERY_TARGETS: alertDeliveryTargetsFromString,
         ALERT_DELIVERY_INTERVAL_SECONDS: z.coerce
             .number()
             .int()
@@ -137,6 +178,17 @@ export const envSchema = z
             .int()
             .positive()
             .default(10_000),
+        OPERATIONAL_METRICS_HISTORY_ENABLED: booleanFromString.default(true),
+        OPERATIONAL_METRICS_HISTORY_INTERVAL_SECONDS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(300),
+        OPERATIONAL_METRICS_HISTORY_RETENTION_DAYS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(30),
         GATEWAY_UPSTREAM_TIMEOUT_MS: z.coerce
             .number()
             .int()
@@ -171,11 +223,15 @@ export const envSchema = z
             .default(1024 * 1024),
     })
     .superRefine((env, context) => {
-        if (env.ALERT_DELIVERY_ENABLED && !env.ALERT_DELIVERY_WEBHOOK_URL) {
+        if (
+            env.ALERT_DELIVERY_ENABLED &&
+            !env.ALERT_DELIVERY_WEBHOOK_URL &&
+            env.ALERT_DELIVERY_TARGETS.length === 0
+        ) {
             context.addIssue({
                 code: z.ZodIssueCode.custom,
                 message:
-                    'ALERT_DELIVERY_WEBHOOK_URL is required when ALERT_DELIVERY_ENABLED=true',
+                    'ALERT_DELIVERY_WEBHOOK_URL or ALERT_DELIVERY_TARGETS is required when ALERT_DELIVERY_ENABLED=true',
                 path: ['ALERT_DELIVERY_WEBHOOK_URL'],
             });
         }

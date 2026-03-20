@@ -19,6 +19,7 @@ describe('StripeWebhooksService', () => {
     };
     let subscriptionsService: {
         recordExternalCheckout: jest.Mock;
+        markInvoicePaid: jest.Mock;
         markInvoiceFailed: jest.Mock;
         syncInvoiceFromExternal: jest.Mock;
         syncSubscriptionFromExternal: jest.Mock;
@@ -40,6 +41,7 @@ describe('StripeWebhooksService', () => {
 
         subscriptionsService = {
             recordExternalCheckout: jest.fn().mockResolvedValue({ ok: true }),
+            markInvoicePaid: jest.fn().mockResolvedValue({ ok: true }),
             markInvoiceFailed: jest.fn().mockResolvedValue({ ok: true }),
             syncInvoiceFromExternal: jest.fn().mockResolvedValue({ ok: true }),
             syncSubscriptionFromExternal: jest
@@ -88,6 +90,39 @@ describe('StripeWebhooksService', () => {
             externalCheckoutSessionId: 'cs_123',
             externalSubscriptionId: 'sub_123',
         });
+        expect(subscriptionsService.markInvoicePaid).not.toHaveBeenCalled();
+    });
+
+    it('activates setup-only checkout sessions locally on completion', async () => {
+        stripeClientService.constructWebhookEvent.mockReturnValue({
+            type: 'checkout.session.completed',
+            data: {
+                object: {
+                    id: 'cs_setup_123',
+                    mode: 'setup',
+                    metadata: {
+                        invoiceId: 'inv-setup-1',
+                    },
+                    subscription: null,
+                },
+            },
+        });
+
+        await service.handleWebhook(Buffer.from('payload'), 'sig');
+
+        expect(
+            subscriptionsService.recordExternalCheckout,
+        ).toHaveBeenCalledWith({
+            invoiceId: 'inv-setup-1',
+            paymentProvider: 'STRIPE',
+            externalCheckoutSessionId: 'cs_setup_123',
+            externalSubscriptionId: undefined,
+        });
+        expect(subscriptionsService.markInvoicePaid).toHaveBeenCalledWith({
+            invoiceId: 'inv-setup-1',
+            paymentProvider: 'STRIPE',
+            externalCheckoutSessionId: 'cs_setup_123',
+        });
     });
 
     it('marks invoice paid from invoice snapshot metadata', async () => {
@@ -134,6 +169,50 @@ describe('StripeWebhooksService', () => {
         expect(
             stripeClientService.client.subscriptions.retrieve,
         ).not.toHaveBeenCalled();
+    });
+
+    it('syncs manual overage invoice events using root invoice metadata', async () => {
+        stripeClientService.constructWebhookEvent.mockReturnValue({
+            type: 'invoice.paid',
+            data: {
+                object: {
+                    id: 'in_overage_123',
+                    billing_reason: 'manual',
+                    metadata: {
+                        invoiceId: 'inv-overage-1',
+                    },
+                    total: 400,
+                    currency: 'usd',
+                    period_start: 1773344775,
+                    period_end: 1775936775,
+                    parent: {
+                        subscription_details: {
+                            metadata: {},
+                            subscription: 'sub_123',
+                        },
+                    },
+                },
+            },
+        });
+
+        await service.handleWebhook(Buffer.from('payload'), 'sig');
+
+        expect(
+            subscriptionsService.syncInvoiceFromExternal,
+        ).toHaveBeenCalledWith({
+            paymentProvider: 'STRIPE',
+            externalInvoiceId: 'in_overage_123',
+            externalSubscriptionId: 'sub_123',
+            metadataInvoiceId: 'inv-overage-1',
+            allowMetadataInvoiceId: true,
+            amountCents: 400,
+            currency: 'USD',
+            periodStart: new Date(1773344775 * 1000),
+            periodEnd: new Date(1775936775 * 1000),
+            status: InvoiceStatus.PAID,
+            attemptCount: 0,
+            nextPaymentAttemptAt: null,
+        });
     });
 
     it('syncs recurring subscription cycle invoice as local draft invoice', async () => {

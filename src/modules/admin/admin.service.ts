@@ -5,6 +5,7 @@ import { AppError } from '../../common/errors/app.error';
 import { ErrorCodes } from '../../common/errors/error.codes';
 import { AuditLogService } from '../../common/observability/audit-log.service';
 import { OperationalAlertDeliveryService } from '../../common/observability/operational-alert-delivery.service';
+import { OperationalMetricsHistoryService } from '../../common/observability/operational-metrics-history.service';
 import { OperationalMonitoringService } from '../../common/observability/operational-monitoring.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { HideProductResponseDto } from './dto/hide-product-response.dto';
@@ -20,6 +21,7 @@ export class AdminService {
         private readonly prisma: PrismaService,
         private readonly auditLogService: AuditLogService,
         private readonly operationalAlertDeliveryService: OperationalAlertDeliveryService,
+        private readonly operationalMetricsHistoryService: OperationalMetricsHistoryService,
         private readonly operationalMonitoringService: OperationalMonitoringService,
     ) {}
 
@@ -178,13 +180,16 @@ export class AdminService {
         const snapshot = await this.operationalMonitoringService.getMetricsSnapshot();
         const alerts =
             this.operationalMonitoringService.deriveOperationalAlerts(snapshot);
-        const alertDelivery =
-            await this.operationalAlertDeliveryService.getStatusSummary(10);
+        const [alertDelivery, metricsHistory] = await Promise.all([
+            this.operationalAlertDeliveryService.getStatusSummary(10),
+            this.operationalMetricsHistoryService.getHistorySummary(48),
+        ]);
 
         return {
             snapshot,
             alerts,
             alertDelivery,
+            metricsHistory,
         };
     }
 }

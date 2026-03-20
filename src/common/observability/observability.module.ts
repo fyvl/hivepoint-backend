@@ -4,6 +4,7 @@ import { AuditLogService } from './audit-log.service';
 import { HttpMetricsService } from './http-metrics.service';
 import { MetricsController } from './metrics.controller';
 import { OperationalAlertDeliveryService } from './operational-alert-delivery.service';
+import { OperationalMetricsHistoryService } from './operational-metrics-history.service';
 import { OperationalMonitoringService } from './operational-monitoring.service';
 import { RequestContextService } from './request-context.service';
 
@@ -16,6 +17,7 @@ import { RequestContextService } from './request-context.service';
         AuditLogService,
         HttpMetricsService,
         OperationalAlertDeliveryService,
+        OperationalMetricsHistoryService,
         OperationalMonitoringService,
     ],
     exports: [
@@ -23,6 +25,7 @@ import { RequestContextService } from './request-context.service';
         AuditLogService,
         HttpMetricsService,
         OperationalAlertDeliveryService,
+        OperationalMetricsHistoryService,
         OperationalMonitoringService,
     ],
 })

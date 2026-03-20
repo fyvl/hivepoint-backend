@@ -7,6 +7,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service';
 import type {
     CreateCustomerPortalSessionParams,
     CreateCustomerPortalSessionResult,
+    CreateManagedInvoiceParams,
     CreatePaymentParams,
     CreatePaymentResult,
     PaymentProvider,
@@ -38,44 +39,63 @@ export class StripePaymentProvider implements PaymentProvider {
 
         let session: Stripe.Checkout.Session;
         try {
-            session =
-                await this.stripeClientService.client.checkout.sessions.create({
-                    mode: 'subscription',
-                    customer: customerId,
-                    client_reference_id: params.invoiceId,
-                    success_url: this.buildSuccessUrl(),
-                    cancel_url: this.configService.stripeCheckoutCancelUrl!,
-                    metadata: {
-                        invoiceId: params.invoiceId,
-                        subscriptionId: params.subscriptionId,
-                        userId: params.userId,
-                        planId: params.planId,
-                    },
-                    subscription_data: {
-                        metadata: {
-                            invoiceId: params.invoiceId,
-                            subscriptionId: params.subscriptionId,
-                            userId: params.userId,
-                            planId: params.planId,
-                        },
-                    },
-                    line_items: [
-                        {
-                            quantity: 1,
-                            price_data: {
-                                currency: params.currency.toLowerCase(),
-                                unit_amount: params.amountCents,
-                                recurring: {
-                                    interval: 'month',
-                                },
-                                product_data: {
-                                    name: params.productTitle,
-                                    description: `Plan: ${params.planName}`,
-                                },
-                            },
-                        },
-                    ],
-                });
+            session = params.setupOnly
+                ? await this.stripeClientService.client.checkout.sessions.create(
+                      {
+                          mode: 'setup',
+                          customer: customerId,
+                          client_reference_id: params.invoiceId,
+                          success_url: this.buildSuccessUrl(),
+                          cancel_url:
+                              this.configService.stripeCheckoutCancelUrl!,
+                          metadata: {
+                              invoiceId: params.invoiceId,
+                              subscriptionId: params.subscriptionId,
+                              userId: params.userId,
+                              planId: params.planId,
+                          },
+                      },
+                  )
+                : await this.stripeClientService.client.checkout.sessions.create(
+                      {
+                          mode: 'subscription',
+                          customer: customerId,
+                          client_reference_id: params.invoiceId,
+                          success_url: this.buildSuccessUrl(),
+                          cancel_url:
+                              this.configService.stripeCheckoutCancelUrl!,
+                          metadata: {
+                              invoiceId: params.invoiceId,
+                              subscriptionId: params.subscriptionId,
+                              userId: params.userId,
+                              planId: params.planId,
+                          },
+                          subscription_data: {
+                              metadata: {
+                                  invoiceId: params.invoiceId,
+                                  subscriptionId: params.subscriptionId,
+                                  userId: params.userId,
+                                  planId: params.planId,
+                              },
+                          },
+                          line_items: [
+                              {
+                                  quantity: 1,
+                                  price_data: {
+                                      currency: params.currency.toLowerCase(),
+                                      unit_amount: params.amountCents,
+                                      recurring: {
+                                          interval: 'month',
+                                      },
+                                      product_data: {
+                                          name: params.productTitle,
+                                          description: `Plan: ${params.planName}`,
+                                      },
+                                  },
+                              },
+                          ],
+                      },
+                  );
         } catch (error) {
             this.handleCreatePaymentError(error, customerId, params.currency);
         }
@@ -140,22 +160,76 @@ export class StripePaymentProvider implements PaymentProvider {
         const invoice = await this.stripeClientService.client.invoices.pay(
             params.externalInvoiceId,
         );
-        const externalSubscriptionId =
-            this.extractExternalSubscriptionId(invoice);
+        return this.toInvoiceResult(invoice);
+    }
 
-        return {
-            externalInvoiceId: invoice.id,
-            externalSubscriptionId,
-            amountCents: invoice.total,
-            currency: invoice.currency.toUpperCase(),
-            periodStart: new Date(invoice.period_start * 1000),
-            periodEnd: new Date(invoice.period_end * 1000),
-            status: this.mapInvoiceStatus(invoice),
-            attemptCount: invoice.attempt_count ?? 0,
-            nextPaymentAttemptAt: invoice.next_payment_attempt
-                ? new Date(invoice.next_payment_attempt * 1000)
-                : null,
-        };
+    async createManagedInvoice(
+        params: CreateManagedInvoiceParams,
+    ): Promise<RetryInvoicePaymentResult> {
+        const customerId = params.externalSubscriptionId
+            ? await this.resolveSubscriptionCustomer(
+                  params.externalSubscriptionId,
+              )
+            : await this.ensureCustomer(params.userId, params.userEmail);
+
+        await this.stripeClientService.client.invoiceItems.create({
+            customer: customerId,
+            ...(params.externalSubscriptionId
+                ? {
+                      subscription: params.externalSubscriptionId,
+                  }
+                : {}),
+            currency: params.currency.toLowerCase(),
+            amount: params.amountCents,
+            description: params.description,
+            metadata: {
+                invoiceId: params.invoiceId,
+                periodStart: params.periodStart.toISOString(),
+                periodEnd: params.periodEnd.toISOString(),
+            },
+        });
+
+        let invoice: Stripe.Invoice;
+        try {
+            invoice = await this.stripeClientService.client.invoices.create({
+                customer: customerId,
+                ...(params.externalSubscriptionId
+                    ? {
+                          subscription: params.externalSubscriptionId,
+                      }
+                    : {}),
+                auto_advance: false,
+                collection_method: 'charge_automatically',
+                metadata: {
+                    invoiceId: params.invoiceId,
+                    periodStart: params.periodStart.toISOString(),
+                    periodEnd: params.periodEnd.toISOString(),
+                },
+            });
+        } catch (error) {
+            throw error;
+        }
+
+        try {
+            if (invoice.status === 'draft') {
+                invoice =
+                    await this.stripeClientService.client.invoices.finalizeInvoice(
+                        invoice.id,
+                    );
+            }
+
+            if (invoice.status !== 'paid') {
+                invoice = await this.stripeClientService.client.invoices.pay(
+                    invoice.id,
+                );
+            }
+        } catch (error) {
+            invoice = await this.stripeClientService.client.invoices.retrieve(
+                invoice.id,
+            );
+        }
+
+        return this.toInvoiceResult(invoice);
     }
 
     private async ensureCustomer(
@@ -251,8 +325,56 @@ export class StripePaymentProvider implements PaymentProvider {
     ): string | undefined {
         const subscription =
             invoice.parent?.subscription_details?.subscription ?? null;
+        if (typeof subscription === 'string') {
+            return subscription;
+        }
 
-        return typeof subscription === 'string' ? subscription : undefined;
+        const rootSubscription = (
+            invoice as Stripe.Invoice & {
+                subscription?: string | Stripe.Subscription | null;
+            }
+        ).subscription;
+
+        return typeof rootSubscription === 'string'
+            ? rootSubscription
+            : undefined;
+    }
+
+    private async resolveSubscriptionCustomer(
+        externalSubscriptionId: string,
+    ): Promise<string> {
+        const subscription =
+            await this.stripeClientService.client.subscriptions.retrieve(
+                externalSubscriptionId,
+            );
+        if (typeof subscription.customer !== 'string') {
+            throw new AppError({
+                code: ErrorCodes.INTERNAL_ERROR,
+                message: 'STRIPE_SUBSCRIPTION_CUSTOMER_MISSING',
+                httpStatus: 500,
+            });
+        }
+
+        return subscription.customer;
+    }
+
+    private toInvoiceResult(invoice: Stripe.Invoice): RetryInvoicePaymentResult {
+        const externalSubscriptionId =
+            this.extractExternalSubscriptionId(invoice);
+
+        return {
+            externalInvoiceId: invoice.id,
+            externalSubscriptionId,
+            amountCents: invoice.total,
+            currency: invoice.currency.toUpperCase(),
+            periodStart: new Date(invoice.period_start * 1000),
+            periodEnd: new Date(invoice.period_end * 1000),
+            status: this.mapInvoiceStatus(invoice),
+            attemptCount: invoice.attempt_count ?? 0,
+            nextPaymentAttemptAt: invoice.next_payment_attempt
+                ? new Date(invoice.next_payment_attempt * 1000)
+                : null,
+        };
     }
 
     private mapInvoiceStatus(

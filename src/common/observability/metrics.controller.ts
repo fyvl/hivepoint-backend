@@ -123,6 +123,11 @@ export class MetricsController {
                 job: 'billing_reconciliation',
             })} ${snapshot.billingReconciliationLeasePresent ? 1 : 0}`,
         );
+        lines.push(
+            `hivepoint_background_job_lease_present${this.formatLabels({
+                job: 'billing_overage_collection',
+            })} ${snapshot.billingOverageCollectionLeasePresent ? 1 : 0}`,
+        );
 
         lines.push(
             '# HELP hivepoint_background_job_lease_seconds_until_expiry Seconds until the background job lease expires',
@@ -143,6 +148,13 @@ export class MetricsController {
                     job: 'billing_reconciliation',
                 },
             )} ${snapshot.billingReconciliationLeaseSecondsUntilExpiry}`,
+        );
+        lines.push(
+            `hivepoint_background_job_lease_seconds_until_expiry${this.formatLabels(
+                {
+                    job: 'billing_overage_collection',
+                },
+            )} ${snapshot.billingOverageCollectionLeaseSecondsUntilExpiry}`,
         );
 
         lines.push(
@@ -198,7 +210,15 @@ export class MetricsController {
         );
         lines.push('# TYPE hivepoint_alert_delivery_webhook_configured gauge');
         lines.push(
-            `hivepoint_alert_delivery_webhook_configured ${this.configService.alertDeliveryWebhookUrl ? 1 : 0}`,
+            `hivepoint_alert_delivery_webhook_configured ${this.configService.alertDeliveryTargets.length > 0 ? 1 : 0}`,
+        );
+
+        lines.push(
+            '# HELP hivepoint_alert_delivery_target_count Number of configured external alert delivery targets',
+        );
+        lines.push('# TYPE hivepoint_alert_delivery_target_count gauge');
+        lines.push(
+            `hivepoint_alert_delivery_target_count ${this.configService.alertDeliveryTargets.length}`,
         );
 
         return `${lines.join('\n')}\n`;

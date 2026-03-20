@@ -1,5 +1,6 @@
 import {
     BillingProvider,
+    InvoiceKind,
     InvoiceStatus,
     ProductStatus,
     Role,
@@ -83,6 +84,7 @@ describe('SubscriptionsService', () => {
             createPayment: jest.fn(),
             scheduleSubscriptionCancelAtPeriodEnd: jest.fn(),
             retryInvoicePayment: jest.fn(),
+            createManagedInvoice: jest.fn(),
         };
         mockPaymentProvider = {
             provider: 'MOCK',
@@ -90,6 +92,7 @@ describe('SubscriptionsService', () => {
             createPayment: jest.fn(),
             scheduleSubscriptionCancelAtPeriodEnd: jest.fn(),
             retryInvoicePayment: jest.fn(),
+            createManagedInvoice: jest.fn(),
         };
         stripePaymentProvider = {
             provider: 'STRIPE',
@@ -97,6 +100,7 @@ describe('SubscriptionsService', () => {
             createPayment: jest.fn(),
             scheduleSubscriptionCancelAtPeriodEnd: jest.fn(),
             retryInvoicePayment: jest.fn(),
+            createManagedInvoice: jest.fn(),
         };
         configService = {
             billingGracePeriodDays: 3,
@@ -170,6 +174,69 @@ describe('SubscriptionsService', () => {
             invoiceId: 'inv-1',
             paymentLink:
                 'http://localhost:3000/billing/mock/pay?invoiceId=inv-1',
+        });
+    });
+
+    it('subscribe uses setup-only Stripe checkout for zero-price plans', async () => {
+        service = new SubscriptionsService(
+            prisma as unknown as PrismaService,
+            configService as AppConfigService,
+            stripePaymentProvider,
+            mockPaymentProvider as unknown as MockPaymentProvider,
+            stripePaymentProvider as unknown as StripePaymentProvider,
+        );
+
+        prisma.plan.findUnique.mockResolvedValue({
+            id: 'plan-paygo',
+            productId: 'product-1',
+            name: 'PayGo',
+            priceCents: 0,
+            currency: 'EUR',
+            isActive: true,
+            product: {
+                title: 'Payments API',
+                status: ProductStatus.PUBLISHED,
+            },
+        });
+        prisma.apiVersion.findFirst.mockResolvedValue({
+            id: 'ver-1',
+            status: VersionStatus.PUBLISHED,
+        });
+        prisma.subscription.findFirst.mockResolvedValueOnce(null);
+        prisma.subscription.create.mockResolvedValue({ id: 'sub-setup-1' });
+        prisma.invoice.create.mockResolvedValue({ id: 'inv-setup-1' });
+        stripePaymentProvider.createPayment.mockResolvedValue({
+            provider: 'STRIPE',
+            paymentLink: 'https://checkout.stripe.com/pay/cs_setup_1',
+            externalPaymentId: 'cs_setup_1',
+        });
+
+        const result = await service.subscribe('plan-paygo', {
+            id: 'user-1',
+            email: 'user@example.com',
+            role: Role.BUYER,
+        });
+
+        expect(
+            stripePaymentProvider.createPayment.mock.calls[0]?.[0],
+        ).toEqual(
+            expect.objectContaining({
+                invoiceId: 'inv-setup-1',
+                subscriptionId: 'sub-setup-1',
+                amountCents: 0,
+                setupOnly: true,
+            }),
+        );
+        expect(prisma.invoice.update).toHaveBeenCalledWith({
+            where: { id: 'inv-setup-1' },
+            data: {
+                externalCheckoutSessionId: 'cs_setup_1',
+            },
+        });
+        expect(result).toEqual({
+            subscriptionId: 'sub-setup-1',
+            invoiceId: 'inv-setup-1',
+            paymentLink: 'https://checkout.stripe.com/pay/cs_setup_1',
         });
     });
 
@@ -344,6 +411,7 @@ describe('SubscriptionsService', () => {
 
         prisma.invoice.findUnique.mockResolvedValue({
             id: 'inv-1',
+            kind: InvoiceKind.SUBSCRIPTION,
             status: InvoiceStatus.DRAFT,
             externalCheckoutSessionId: null,
             externalInvoiceId: null,
@@ -389,6 +457,7 @@ describe('SubscriptionsService', () => {
 
         prisma.invoice.findUnique.mockResolvedValue({
             id: 'inv-1',
+            kind: InvoiceKind.SUBSCRIPTION,
             status: InvoiceStatus.DRAFT,
             externalCheckoutSessionId: null,
             externalInvoiceId: null,
@@ -480,6 +549,7 @@ describe('SubscriptionsService', () => {
             })
             .mockResolvedValueOnce({
                 id: 'inv-renew-1',
+                kind: InvoiceKind.SUBSCRIPTION,
                 status: InvoiceStatus.DRAFT,
                 externalCheckoutSessionId: null,
                 externalInvoiceId: 'in_renew_1',
@@ -568,6 +638,7 @@ describe('SubscriptionsService', () => {
             })
             .mockResolvedValueOnce({
                 id: 'inv-renew-1',
+                kind: InvoiceKind.SUBSCRIPTION,
                 status: InvoiceStatus.DRAFT,
                 externalCheckoutSessionId: null,
                 externalInvoiceId: 'in_renew_1',
@@ -629,6 +700,109 @@ describe('SubscriptionsService', () => {
         expect(result).toEqual({
             ok: true,
             invoiceId: 'inv-renew-1',
+        });
+    });
+
+    it('marking an overage invoice paid does not change subscription state', async () => {
+        const periodStart = new Date('2026-04-12T19:49:57.000Z');
+        const periodEnd = new Date('2026-05-12T19:49:57.000Z');
+
+        prisma.invoice.findUnique.mockResolvedValue({
+            id: 'inv-overage-1',
+            kind: InvoiceKind.OVERAGE,
+            status: InvoiceStatus.DRAFT,
+            externalCheckoutSessionId: null,
+            externalInvoiceId: null,
+            attemptCount: 0,
+            managedRetryCount: 0,
+            managedNextRetryAt: null,
+            managedLastRetryAt: null,
+            managedRetryExhaustedAt: null,
+            managedLastRetryError: null,
+            periodStart,
+            periodEnd,
+            subscription: {
+                id: 'sub-1',
+                externalSubscriptionId: 'sub_ext_1',
+            },
+        });
+
+        const result = await service.markInvoicePaid({
+            invoiceId: 'inv-overage-1',
+            paymentProvider: 'STRIPE',
+            externalInvoiceId: 'in_overage_1',
+            externalSubscriptionId: 'sub_ext_1',
+            attemptCount: 1,
+        });
+
+        expect(prisma.invoice.update).toHaveBeenCalledWith({
+            where: { id: 'inv-overage-1' },
+            data: {
+                status: InvoiceStatus.PAID,
+                paymentProvider: BillingProvider.STRIPE,
+                externalCheckoutSessionId: null,
+                externalInvoiceId: 'in_overage_1',
+                attemptCount: 1,
+                nextPaymentAttemptAt: null,
+            },
+        });
+        expect(prisma.subscription.update).not.toHaveBeenCalled();
+        expect(result).toEqual({
+            ok: true,
+        });
+    });
+
+    it('marking an overage invoice failed does not mark the subscription past due', async () => {
+        const currentPeriodStart = new Date('2026-04-12T19:49:57.000Z');
+        const currentPeriodEnd = new Date('2026-05-12T19:49:57.000Z');
+        const nextPaymentAttemptAt = new Date('2026-05-13T10:00:00.000Z');
+
+        prisma.invoice.findUnique.mockResolvedValue({
+            id: 'inv-overage-1',
+            kind: InvoiceKind.OVERAGE,
+            status: InvoiceStatus.DRAFT,
+            externalInvoiceId: null,
+            externalCheckoutSessionId: null,
+            attemptCount: 0,
+            managedRetryCount: 0,
+            managedNextRetryAt: null,
+            managedLastRetryAt: null,
+            managedRetryExhaustedAt: null,
+            managedLastRetryError: null,
+            subscription: {
+                id: 'sub-1',
+                status: SubscriptionStatus.ACTIVE,
+                currentPeriodStart,
+                currentPeriodEnd,
+                gracePeriodEndsAt: null,
+                externalSubscriptionId: 'sub_ext_1',
+            },
+        });
+
+        const result = await service.markInvoiceFailed({
+            invoiceId: 'inv-overage-1',
+            paymentProvider: 'STRIPE',
+            externalInvoiceId: 'in_overage_1',
+            externalSubscriptionId: 'sub_ext_1',
+            invoiceStatus: InvoiceStatus.PAST_DUE,
+            attemptCount: 1,
+            nextPaymentAttemptAt,
+        });
+
+        expect(prisma.invoice.update).toHaveBeenCalledWith({
+            where: { id: 'inv-overage-1' },
+            data: {
+                status: InvoiceStatus.PAST_DUE,
+                paymentProvider: BillingProvider.STRIPE,
+                externalCheckoutSessionId: null,
+                externalInvoiceId: 'in_overage_1',
+                attemptCount: 1,
+                nextPaymentAttemptAt,
+            },
+        });
+        expect(prisma.subscription.update).not.toHaveBeenCalled();
+        expect(result).toEqual({
+            ok: true,
         });
     });
 

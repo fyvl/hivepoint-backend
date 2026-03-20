@@ -45,6 +45,11 @@ enum InvoiceStatus {
   VOID
 }
 
+enum InvoiceKind {
+  SUBSCRIPTION
+  OVERAGE
+}
+
 enum BillingProvider {
   MOCK
   STRIPE
@@ -164,8 +169,13 @@ model Invoice {
   id                        String          @id @default(uuid())
   subscriptionId            String
   paymentProvider           BillingProvider @default(MOCK)
+  kind                      InvoiceKind     @default(SUBSCRIPTION)
   externalCheckoutSessionId String?         @unique
   externalInvoiceId         String?         @unique
+  overageSourceInvoiceId    String?         @unique
+  overageProcessedAt        DateTime?
+  overageRequests           Int?
+  overageUnits              Int?
   amountCents               Int
   currency                  String          @default("EUR")
   status                    InvoiceStatus   @default(DRAFT)
@@ -180,9 +190,12 @@ model Invoice {
   periodEnd                 DateTime
   createdAt                 DateTime        @default(now())
   subscription              Subscription    @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  overageSourceInvoice      Invoice?        @relation("InvoiceOverageSource", fields: [overageSourceInvoiceId], references: [id], onDelete: SetNull)
+  derivedOverageInvoice     Invoice?        @relation("InvoiceOverageSource")
 
   @@index([subscriptionId])
   @@index([status, managedNextRetryAt, createdAt])
+  @@index([kind, status, periodEnd, overageProcessedAt])
 }
 
 model BackgroundJobLease {
@@ -317,6 +330,42 @@ model OperationalAlertState {
 
   @@index([resolvedAt, updatedAt])
   @@index([updatedAt])
+}
+
+model OperationalAlertDeliveryTargetState {
+  alertKind             String
+  targetKey             String
+  fingerprint           String
+  resolvedAt            DateTime?
+  lastDeliveredAt       DateTime?
+  lastDeliveryAttemptAt DateTime?
+  deliveryCount         Int      @default(0)
+  deliveryFailures      Int      @default(0)
+  lastDeliveryError     String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@id([alertKind, targetKey])
+  @@index([resolvedAt, updatedAt])
+  @@index([updatedAt])
+}
+
+model OperationalMetricsHistoryPoint {
+  id                                   String   @id @default(uuid())
+  capturedAt                           DateTime @default(now())
+  usageIngestPendingJobs               Int
+  usageIngestFailedJobs                Int
+  usageIngestOldestPendingAgeSeconds   Int
+  usageIngestLeasePresent              Boolean
+  usageIngestLeaseSecondsUntilExpiry   Int
+  billingReconciliationLeasePresent    Boolean
+  billingReconciliationLeaseSecondsUntilExpiry Int
+  billingOverageCollectionLeasePresent Boolean
+  billingOverageCollectionLeaseSecondsUntilExpiry Int
+  subscriptionsPastDue                 Int
+  auditLogsLast24h                     Int
+
+  @@index([capturedAt])
 }
 
 model ProductView {

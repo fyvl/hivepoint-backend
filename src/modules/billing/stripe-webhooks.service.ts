@@ -84,6 +84,17 @@ export class StripeWebhooksService {
                         ? session.subscription
                         : undefined,
             });
+
+            if (
+                session.mode === 'setup' ||
+                typeof session.subscription !== 'string'
+            ) {
+                await this.subscriptionsService.markInvoicePaid({
+                    invoiceId,
+                    paymentProvider: 'STRIPE',
+                    externalCheckoutSessionId: session.id,
+                });
+            }
         } catch (error) {
             this.ignoreNotFound(error);
         }
@@ -133,20 +144,21 @@ export class StripeWebhooksService {
             typeof invoiceDetails?.subscription === 'string'
                 ? invoiceDetails.subscription
                 : undefined;
-        const allowMetadataInvoiceId =
-            this.shouldAllowMetadataInvoiceId(invoice);
-        const metadata =
-            invoiceDetails?.metadata ??
-            (allowMetadataInvoiceId
-                ? await this.resolveSubscriptionMetadata(externalSubscriptionId)
-                : null);
+        const allowMetadataInvoiceId = this.shouldAllowMetadataInvoiceId(
+            invoice,
+        );
+        const metadataInvoiceId = await this.resolveMetadataInvoiceId(
+            invoice,
+            externalSubscriptionId,
+            allowMetadataInvoiceId,
+        );
 
         try {
             await this.subscriptionsService.syncInvoiceFromExternal({
                 paymentProvider: 'STRIPE',
                 externalInvoiceId: invoice.id,
                 externalSubscriptionId,
-                metadataInvoiceId: metadata?.invoiceId,
+                metadataInvoiceId,
                 allowMetadataInvoiceId,
                 amountCents: invoice.total,
                 currency: invoice.currency.toUpperCase(),
@@ -216,8 +228,34 @@ export class StripeWebhooksService {
 
     private shouldAllowMetadataInvoiceId(invoice: Stripe.Invoice): boolean {
         return (
+            Boolean(invoice.metadata?.invoiceId) ||
             invoice.billing_reason === 'subscription' ||
             invoice.billing_reason === 'subscription_create'
+        );
+    }
+
+    private async resolveMetadataInvoiceId(
+        invoice: Stripe.Invoice,
+        externalSubscriptionId: string | undefined,
+        allowMetadataInvoiceId: boolean,
+    ): Promise<string | undefined> {
+        const invoiceDetails = this.extractInvoiceSubscriptionDetails(invoice);
+        const directInvoiceId = invoice.metadata?.invoiceId;
+        if (directInvoiceId) {
+            return directInvoiceId;
+        }
+
+        if (invoiceDetails?.metadata?.invoiceId) {
+            return invoiceDetails.metadata.invoiceId;
+        }
+
+        if (!allowMetadataInvoiceId) {
+            return undefined;
+        }
+
+        return (
+            (await this.resolveSubscriptionMetadata(externalSubscriptionId))
+                ?.invoiceId ?? undefined
         );
     }
 
