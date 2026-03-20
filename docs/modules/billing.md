@@ -7,7 +7,7 @@ Provides plan listing/creation and subscription listing/cancel. Payment processi
 | Method | Path | Auth | Request | Response | Notes |
 | --- | --- | --- | --- | --- | --- |
 | GET | `/billing/plans` | Public | Query: `productId` | `PlanListResponseDto` | Returns only active plans; product must exist. |
-| POST | `/billing/plans` | Bearer + Roles | `CreatePlanDto` | `PlanDto` | Roles: `SELLER`, `ADMIN`; seller must own the product. Defaults: `currency=EUR`, `period=MONTH`, `isActive=true`. |
+| POST | `/billing/plans` | Bearer + Roles | `CreatePlanDto` | `PlanDto` | Roles: `SELLER`, `ADMIN`; seller must own the product. Defaults: `currency=EUR`, `period=MONTH`, `isActive=true`. Optional overage is configured with `allowOverage=true` plus `overageUnitRequests` and `overagePriceCents`. |
 
 ## Subscriptions
 | Method | Path | Auth | Request | Response | Notes |
@@ -21,6 +21,7 @@ Provides plan listing/creation and subscription listing/cancel. Payment processi
 ## Notes
 - Subscribe flow (`POST /billing/subscribe`) and mock payments are documented in `payments-mock.md`.
 - Stripe webhook sync now also stores recurring Stripe invoices locally by `externalInvoiceId`, so invoice history is not limited to the first checkout invoice.
+- Plans can now expose overage policy to buyers through plan and subscription DTOs, but automated overage invoicing/collection is still a later production step.
 - `PlanPeriod` enum currently contains only `MONTH`.
 
 ## Error codes
@@ -31,3 +32,4 @@ Provides plan listing/creation and subscription listing/cancel. Payment processi
 - `FORBIDDEN_ROLE`
 - `SUBSCRIPTION_NOT_FOUND`
 - `CHECKOUT_SESSION_NOT_FOUND`
+

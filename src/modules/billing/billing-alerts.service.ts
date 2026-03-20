@@ -132,6 +132,28 @@ export class BillingAlertsService {
         });
 
         usageSummary.items.forEach((item) => {
+            if (item.overageEnabled && item.overageRequests > 0) {
+                const priceMessage =
+                    item.overagePriceCents && item.overageUnitRequests
+                        ? ` Projected overage charges are ${item.projectedOverageAmountCents} cents for ${item.overageRequests} extra requests.`
+                        : '';
+
+                alerts.push({
+                    kind: BillingAlertKind.OVERAGE_ACTIVE,
+                    severity: BillingAlertSeverity.WARNING,
+                    subscriptionId: item.subscriptionId,
+                    productId: item.product.id,
+                    invoiceId: null,
+                    versionId: null,
+                    title: `Overage active for ${item.product.title}`,
+                    message: `${item.usedRequests} of ${item.quotaRequests} included requests have been consumed in the current billing period.${priceMessage}`,
+                    actionLabel: 'Review usage',
+                    actionUrl: '/usage',
+                    effectiveAt: item.periodEnd,
+                });
+                return;
+            }
+
             if (item.percent >= 100) {
                 alerts.push({
                     kind: BillingAlertKind.QUOTA_EXCEEDED,

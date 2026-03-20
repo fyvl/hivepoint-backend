@@ -13,6 +13,15 @@ export class UsageSummaryPlanDto {
 
     @ApiProperty({ type: Number, example: 120, nullable: true })
     rateLimitRpm!: number | null;
+
+    @ApiProperty({ example: false })
+    allowOverage!: boolean;
+
+    @ApiProperty({ type: Number, example: 1000, nullable: true })
+    overageUnitRequests!: number | null;
+
+    @ApiProperty({ type: Number, example: 250, nullable: true })
+    overagePriceCents!: number | null;
 }
 
 export class UsageSummaryProductDto {
@@ -47,6 +56,21 @@ export class UsageSummaryItemDto {
 
     @ApiProperty({ example: 12 })
     percent!: number;
+
+    @ApiProperty({ example: false })
+    overageEnabled!: boolean;
+
+    @ApiProperty({ type: Number, example: 1000, nullable: true })
+    overageUnitRequests!: number | null;
+
+    @ApiProperty({ type: Number, example: 250, nullable: true })
+    overagePriceCents!: number | null;
+
+    @ApiProperty({ example: 0 })
+    overageRequests!: number;
+
+    @ApiProperty({ example: 0 })
+    projectedOverageAmountCents!: number;
 
     @ApiProperty({ type: UsageSummaryPlanDto })
     plan!: UsageSummaryPlanDto;

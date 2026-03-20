@@ -24,5 +24,14 @@ export class CreatePlanDto {
     rateLimitRpm?: number;
 
     @ApiPropertyOptional({ example: true })
+    allowOverage?: boolean;
+
+    @ApiPropertyOptional({ example: 1000, minimum: 1 })
+    overageUnitRequests?: number;
+
+    @ApiPropertyOptional({ example: 250, minimum: 1 })
+    overagePriceCents?: number;
+
+    @ApiPropertyOptional({ example: true })
     isActive?: boolean;
 }

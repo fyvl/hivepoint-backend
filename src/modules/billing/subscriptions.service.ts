@@ -72,6 +72,9 @@ export class SubscriptionsService {
                         currency: true,
                         quotaRequests: true,
                         rateLimitRpm: true,
+                        allowOverage: true,
+                        overageUnitRequests: true,
+                        overagePriceCents: true,
                         productId: true,
                         product: {
                             select: {
@@ -115,6 +118,9 @@ export class SubscriptionsService {
                     currency: subscription.plan.currency,
                     quotaRequests: subscription.plan.quotaRequests,
                     rateLimitRpm: subscription.plan.rateLimitRpm,
+                    allowOverage: subscription.plan.allowOverage,
+                    overageUnitRequests: subscription.plan.overageUnitRequests,
+                    overagePriceCents: subscription.plan.overagePriceCents,
                     productId: subscription.plan.productId,
                 },
                 product: {
@@ -1017,3 +1023,5 @@ export class SubscriptionsService {
         return invoice.id;
     }
 }
+
+

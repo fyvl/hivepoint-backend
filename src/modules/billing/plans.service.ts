@@ -17,6 +17,9 @@ const planSelect = {
     period: true,
     quotaRequests: true,
     rateLimitRpm: true,
+    allowOverage: true,
+    overageUnitRequests: true,
+    overagePriceCents: true,
     isActive: true,
     createdAt: true,
 } as const;
@@ -117,6 +120,8 @@ export class PlansService {
             });
         }
 
+        const overageConfig = this.resolveOverageConfig(input);
+
         return this.prisma.plan.create({
             data: {
                 productId: input.productId,
@@ -126,10 +131,58 @@ export class PlansService {
                 period: input.period ?? PlanPeriod.MONTH,
                 quotaRequests: input.quotaRequests,
                 rateLimitRpm: input.rateLimitRpm ?? null,
+                allowOverage: overageConfig.allowOverage,
+                overageUnitRequests: overageConfig.overageUnitRequests,
+                overagePriceCents: overageConfig.overagePriceCents,
                 isActive: input.isActive ?? true,
             },
             select: planSelect,
         });
+    }
+
+    private resolveOverageConfig(input: CreatePlanInput): {
+        allowOverage: boolean;
+        overageUnitRequests: number | null;
+        overagePriceCents: number | null;
+    } {
+        const allowOverage = input.allowOverage === true;
+        const hasOverageFields =
+            input.overageUnitRequests !== undefined ||
+            input.overagePriceCents !== undefined;
+
+        if (!allowOverage) {
+            if (hasOverageFields) {
+                throw new AppError({
+                    code: ErrorCodes.BAD_REQUEST,
+                    message: 'OVERAGE_FIELDS_REQUIRE_ALLOW_OVERAGE',
+                    httpStatus: 400,
+                });
+            }
+
+            return {
+                allowOverage: false,
+                overageUnitRequests: null,
+                overagePriceCents: null,
+            };
+        }
+
+        if (
+            input.overageUnitRequests === undefined ||
+            input.overagePriceCents === undefined
+        ) {
+            throw new AppError({
+                code: ErrorCodes.BAD_REQUEST,
+                message:
+                    'OVERAGE_UNIT_REQUESTS_AND_OVERAGE_PRICE_CENTS_REQUIRED',
+                httpStatus: 400,
+            });
+        }
+
+        return {
+            allowOverage: true,
+            overageUnitRequests: input.overageUnitRequests,
+            overagePriceCents: input.overagePriceCents,
+        };
     }
 
     private isOwnerOrAdmin(

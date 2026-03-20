@@ -65,6 +65,9 @@ describe('BillingAlertsService', () => {
                         currency: 'EUR',
                         quotaRequests: 1000,
                         rateLimitRpm: 120,
+                        allowOverage: false,
+                        overageUnitRequests: null,
+                        overagePriceCents: null,
                         productId: 'product-1',
                     },
                     latestInvoice: {
@@ -104,6 +107,9 @@ describe('BillingAlertsService', () => {
                         currency: 'EUR',
                         quotaRequests: 5000,
                         rateLimitRpm: 240,
+                        allowOverage: false,
+                        overageUnitRequests: null,
+                        overagePriceCents: null,
                         productId: 'product-2',
                     },
                     latestInvoice: null,
@@ -122,11 +128,19 @@ describe('BillingAlertsService', () => {
                     usedRequests: 4200,
                     quotaRequests: 5000,
                     percent: 84,
+                    overageEnabled: false,
+                    overageUnitRequests: null,
+                    overagePriceCents: null,
+                    overageRequests: 0,
+                    projectedOverageAmountCents: 0,
                     plan: {
                         id: 'plan-2',
                         name: 'Growth',
                         quotaRequests: 5000,
                         rateLimitRpm: 240,
+                        allowOverage: false,
+                        overageUnitRequests: null,
+                        overagePriceCents: null,
                     },
                     product: {
                         id: 'product-2',
@@ -159,5 +173,86 @@ describe('BillingAlertsService', () => {
                 BillingAlertKind.NEW_VERSION_AVAILABLE,
             ]),
         );
+    });
+
+    it('emits overage alert instead of quota exceeded for overage-enabled plans', async () => {
+        subscriptionsService.listUserSubscriptions.mockResolvedValue({
+            items: [
+                {
+                    id: 'subscription-2',
+                    status: 'ACTIVE',
+                    currentPeriodStart: new Date('2026-03-01T00:00:00.000Z'),
+                    currentPeriodEnd: new Date('2026-03-31T00:00:00.000Z'),
+                    gracePeriodEndsAt: null,
+                    cancelAtPeriodEnd: false,
+                    paymentProvider: 'STRIPE',
+                    hasExternalSubscription: true,
+                    createdAt: new Date('2026-03-01T00:00:00.000Z'),
+                    updatedAt: new Date('2026-03-18T00:00:00.000Z'),
+                    product: {
+                        id: 'product-2',
+                        title: 'Search API',
+                    },
+                    plan: {
+                        id: 'plan-2',
+                        name: 'Growth',
+                        priceCents: 4900,
+                        currency: 'EUR',
+                        quotaRequests: 5000,
+                        rateLimitRpm: 240,
+                        allowOverage: true,
+                        overageUnitRequests: 1000,
+                        overagePriceCents: 250,
+                        productId: 'product-2',
+                    },
+                    latestInvoice: null,
+                    invoices: [],
+                },
+            ],
+        });
+        usageService.getSummary.mockResolvedValue({
+            items: [
+                {
+                    subscriptionId: 'subscription-2',
+                    status: 'ACTIVE',
+                    periodStart: new Date('2026-03-01T00:00:00.000Z'),
+                    periodEnd: new Date('2026-03-31T00:00:00.000Z'),
+                    gracePeriodEndsAt: null,
+                    usedRequests: 6200,
+                    quotaRequests: 5000,
+                    percent: 100,
+                    overageEnabled: true,
+                    overageUnitRequests: 1000,
+                    overagePriceCents: 250,
+                    overageRequests: 1200,
+                    projectedOverageAmountCents: 500,
+                    plan: {
+                        id: 'plan-2',
+                        name: 'Growth',
+                        quotaRequests: 5000,
+                        rateLimitRpm: 240,
+                        allowOverage: true,
+                        overageUnitRequests: 1000,
+                        overagePriceCents: 250,
+                    },
+                    product: {
+                        id: 'product-2',
+                        title: 'Search API',
+                    },
+                },
+            ],
+        });
+        prisma.apiVersion.findMany.mockResolvedValue([]);
+
+        const result = await service.listAlerts({
+            id: 'buyer-1',
+            email: 'buyer@example.com',
+            role: 'BUYER',
+        });
+
+        expect(result.items.map((item) => item.kind)).toEqual([
+            BillingAlertKind.OVERAGE_ACTIVE,
+        ]);
+        expect(result.items[0]?.message).toContain('Projected overage charges are 500 cents');
     });
 });

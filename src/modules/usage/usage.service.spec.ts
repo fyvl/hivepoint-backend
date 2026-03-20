@@ -137,6 +137,9 @@ describe('UsageService', () => {
                 name: 'Starter',
                 quotaRequests: 1000,
                 rateLimitRpm: null,
+                allowOverage: false,
+                overageUnitRequests: null,
+                overagePriceCents: null,
                 product: {
                     id: 'prod-1',
                     title: 'Payments API',
@@ -182,12 +185,20 @@ describe('UsageService', () => {
             remainingRequests: 878,
             rateLimitRpm: null,
             remainingRateLimitRequests: null,
+            overageEnabled: false,
+            overageUnitRequests: null,
+            overagePriceCents: null,
+            projectedOverageRequests: 0,
+            projectedOverageAmountCents: 0,
             usageRecorded: true,
             plan: {
                 id: 'plan-1',
                 name: 'Starter',
                 quotaRequests: 1000,
                 rateLimitRpm: null,
+                allowOverage: false,
+                overageUnitRequests: null,
+                overagePriceCents: null,
             },
             product: {
                 id: 'prod-1',
@@ -220,6 +231,9 @@ describe('UsageService', () => {
                 name: 'Starter',
                 quotaRequests: 1000,
                 rateLimitRpm: null,
+                allowOverage: false,
+                overageUnitRequests: null,
+                overagePriceCents: null,
                 product: {
                     id: 'prod-1',
                     title: 'Payments API',
@@ -242,7 +256,91 @@ describe('UsageService', () => {
             remainingRequests: 950,
             rateLimitRpm: null,
             remainingRateLimitRequests: null,
+            overageEnabled: false,
+            projectedOverageRequests: 0,
+            projectedOverageAmountCents: 0,
             usageRecorded: false,
+        });
+    });
+
+    it('allows overage-enabled plans beyond quota and projects charges', async () => {
+        const periodStart = new Date('2099-01-01T00:00:00.000Z');
+        const periodEnd = new Date('2099-02-01T00:00:00.000Z');
+
+        prisma.apiProduct.findUnique.mockResolvedValue({
+            id: 'prod-1',
+            title: 'Payments API',
+        });
+        prisma.apiKey.findFirst.mockResolvedValue({
+            id: 'key-1',
+            userId: 'user-1',
+        });
+        prisma.subscription.findFirst.mockResolvedValue({
+            id: 'sub-1',
+            userId: 'user-1',
+            status: SubscriptionStatus.ACTIVE,
+            currentPeriodStart: periodStart,
+            currentPeriodEnd: periodEnd,
+            gracePeriodEndsAt: null,
+            plan: {
+                id: 'plan-1',
+                name: 'Growth',
+                quotaRequests: 100,
+                rateLimitRpm: null,
+                allowOverage: true,
+                overageUnitRequests: 100,
+                overagePriceCents: 250,
+                product: {
+                    id: 'prod-1',
+                    title: 'Payments API',
+                },
+            },
+        });
+        usageAggregationService.sumUsageForWindow.mockResolvedValue(150);
+
+        const result = await service.authorizeUsage(
+            {
+                apiKey: 'hp_valid',
+                productId: 'prod-1',
+                endpoint: '/v1/search',
+                requestCount: 25,
+                occurredAt: '2099-01-25T10:00:00.000Z',
+            },
+            'secret',
+        );
+
+        expect(result).toEqual({
+            allowed: true,
+            apiKeyId: 'key-1',
+            subscriptionId: 'sub-1',
+            userId: 'user-1',
+            periodStart,
+            periodEnd,
+            usedRequests: 150,
+            requestedRequests: 25,
+            quotaRequests: 100,
+            remainingRequests: 0,
+            rateLimitRpm: null,
+            remainingRateLimitRequests: null,
+            overageEnabled: true,
+            overageUnitRequests: 100,
+            overagePriceCents: 250,
+            projectedOverageRequests: 75,
+            projectedOverageAmountCents: 250,
+            usageRecorded: false,
+            plan: {
+                id: 'plan-1',
+                name: 'Growth',
+                quotaRequests: 100,
+                rateLimitRpm: null,
+                allowOverage: true,
+                overageUnitRequests: 100,
+                overagePriceCents: 250,
+            },
+            product: {
+                id: 'prod-1',
+                title: 'Payments API',
+            },
         });
     });
 
@@ -270,6 +368,9 @@ describe('UsageService', () => {
                 name: 'Starter',
                 quotaRequests: 100,
                 rateLimitRpm: null,
+                allowOverage: false,
+                overageUnitRequests: null,
+                overagePriceCents: null,
                 product: {
                     id: 'prod-1',
                     title: 'Payments API',
@@ -303,12 +404,20 @@ describe('UsageService', () => {
             remainingRequests: 1,
             rateLimitRpm: null,
             remainingRateLimitRequests: null,
+            overageEnabled: false,
+            overageUnitRequests: null,
+            overagePriceCents: null,
+            projectedOverageRequests: 0,
+            projectedOverageAmountCents: 0,
             usageRecorded: false,
             plan: {
                 id: 'plan-1',
                 name: 'Starter',
                 quotaRequests: 100,
                 rateLimitRpm: null,
+                allowOverage: false,
+                overageUnitRequests: null,
+                overagePriceCents: null,
             },
             product: {
                 id: 'prod-1',
@@ -341,6 +450,9 @@ describe('UsageService', () => {
                 name: 'Starter',
                 quotaRequests: 1000,
                 rateLimitRpm: 60,
+                allowOverage: false,
+                overageUnitRequests: null,
+                overagePriceCents: null,
                 product: {
                     id: 'prod-1',
                     title: 'Payments API',
@@ -377,12 +489,20 @@ describe('UsageService', () => {
             remainingRequests: 900,
             rateLimitRpm: 60,
             remainingRateLimitRequests: 0,
+            overageEnabled: false,
+            overageUnitRequests: null,
+            overagePriceCents: null,
+            projectedOverageRequests: 0,
+            projectedOverageAmountCents: 0,
             usageRecorded: false,
             plan: {
                 id: 'plan-1',
                 name: 'Starter',
                 quotaRequests: 1000,
                 rateLimitRpm: 60,
+                allowOverage: false,
+                overageUnitRequests: null,
+                overagePriceCents: null,
             },
             product: {
                 id: 'prod-1',
@@ -416,6 +536,9 @@ describe('UsageService', () => {
                 name: 'Starter',
                 quotaRequests: 1000,
                 rateLimitRpm: null,
+                allowOverage: false,
+                overageUnitRequests: null,
+                overagePriceCents: null,
                 product: {
                     id: 'prod-1',
                     title: 'Payments API',
@@ -445,12 +568,20 @@ describe('UsageService', () => {
             remainingRequests: 800,
             rateLimitRpm: null,
             remainingRateLimitRequests: null,
+            overageEnabled: false,
+            overageUnitRequests: null,
+            overagePriceCents: null,
+            projectedOverageRequests: 0,
+            projectedOverageAmountCents: 0,
             usageRecorded: false,
             plan: {
                 id: 'plan-1',
                 name: 'Starter',
                 quotaRequests: 1000,
                 rateLimitRpm: null,
+                allowOverage: false,
+                overageUnitRequests: null,
+                overagePriceCents: null,
             },
             product: {
                 id: 'prod-1',
@@ -585,6 +716,9 @@ describe('UsageService', () => {
                     name: 'Starter',
                     quotaRequests: 1000,
                     rateLimitRpm: 120,
+                    allowOverage: false,
+                    overageUnitRequests: null,
+                    overagePriceCents: null,
                     product: {
                         id: 'prod-1',
                         title: 'Payments API',
@@ -602,6 +736,9 @@ describe('UsageService', () => {
                     name: 'Pro',
                     quotaRequests: 2000,
                     rateLimitRpm: null,
+                    allowOverage: false,
+                    overageUnitRequests: null,
+                    overagePriceCents: null,
                     product: {
                         id: 'prod-2',
                         title: 'Search API',
@@ -650,11 +787,19 @@ describe('UsageService', () => {
                     usedRequests: 120,
                     quotaRequests: 1000,
                     percent: 12,
+                    overageEnabled: false,
+                    overageUnitRequests: null,
+                    overagePriceCents: null,
+                    overageRequests: 0,
+                    projectedOverageAmountCents: 0,
                     plan: {
                         id: 'plan-1',
                         name: 'Starter',
                         quotaRequests: 1000,
                         rateLimitRpm: 120,
+                        allowOverage: false,
+                        overageUnitRequests: null,
+                        overagePriceCents: null,
                     },
                     product: {
                         id: 'prod-1',
@@ -687,6 +832,9 @@ describe('UsageService', () => {
                     name: 'Starter',
                     quotaRequests: 1000,
                     rateLimitRpm: 120,
+                    allowOverage: false,
+                    overageUnitRequests: null,
+                    overagePriceCents: null,
                     product: {
                         id: 'prod-1',
                         title: 'Payments API',
@@ -715,11 +863,19 @@ describe('UsageService', () => {
                     usedRequests: 320,
                     quotaRequests: 1000,
                     percent: 32,
+                    overageEnabled: false,
+                    overageUnitRequests: null,
+                    overagePriceCents: null,
+                    overageRequests: 0,
+                    projectedOverageAmountCents: 0,
                     plan: {
                         id: 'plan-1',
                         name: 'Starter',
                         quotaRequests: 1000,
                         rateLimitRpm: 120,
+                        allowOverage: false,
+                        overageUnitRequests: null,
+                        overagePriceCents: null,
                     },
                     product: {
                         id: 'prod-1',

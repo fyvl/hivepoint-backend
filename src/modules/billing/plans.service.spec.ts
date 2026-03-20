@@ -51,6 +51,9 @@ describe('PlansService', () => {
             period: PlanPeriod.MONTH,
             quotaRequests: 10000,
             rateLimitRpm: 120,
+            allowOverage: false,
+            overageUnitRequests: null,
+            overagePriceCents: null,
             isActive: true,
             createdAt: new Date(),
         });
@@ -79,10 +82,65 @@ describe('PlansService', () => {
                     isActive: true,
                     period: PlanPeriod.MONTH,
                     rateLimitRpm: 120,
+                    allowOverage: false,
+                    overageUnitRequests: null,
+                    overagePriceCents: null,
                 }),
             }),
         );
         expect(result.id).toBe('plan-1');
+    });
+
+    it('seller can create overage-enabled plan for own product', async () => {
+        prisma.apiProduct.findUnique.mockResolvedValue({
+            id: 'product-1',
+            ownerId: 'seller-1',
+        });
+        prisma.plan.create.mockResolvedValue({
+            id: 'plan-2',
+            productId: 'product-1',
+            name: 'Growth',
+            priceCents: 4900,
+            currency: 'EUR',
+            period: PlanPeriod.MONTH,
+            quotaRequests: 5000,
+            rateLimitRpm: 240,
+            allowOverage: true,
+            overageUnitRequests: 1000,
+            overagePriceCents: 250,
+            isActive: true,
+            createdAt: new Date(),
+        });
+
+        const user = {
+            id: 'seller-1',
+            email: 'seller@example.com',
+            role: Role.SELLER,
+        };
+
+        await service.createPlan(
+            {
+                productId: 'product-1',
+                name: 'Growth',
+                priceCents: 4900,
+                quotaRequests: 5000,
+                rateLimitRpm: 240,
+                allowOverage: true,
+                overageUnitRequests: 1000,
+                overagePriceCents: 250,
+            },
+            user,
+        );
+
+        expect(prisma.plan.create).toHaveBeenCalledWith(
+            expect.objectContaining({
+                data: expect.objectContaining({
+                    allowOverage: true,
+                    overageUnitRequests: 1000,
+                    overagePriceCents: 250,
+                }),
+            }),
+        );
     });
 
     it('seller cannot create plan for another product owner', async () => {
@@ -109,6 +167,34 @@ describe('PlansService', () => {
             ),
         ).rejects.toMatchObject({
             code: ErrorCodes.NOT_OWNER,
+        });
+    });
+
+    it('rejects overage fields when allowOverage is disabled', async () => {
+        prisma.apiProduct.findUnique.mockResolvedValue({
+            id: 'product-1',
+            ownerId: 'seller-1',
+        });
+
+        await expect(
+            service.createPlan(
+                {
+                    productId: 'product-1',
+                    name: 'Starter',
+                    priceCents: 1000,
+                    quotaRequests: 10000,
+                    overageUnitRequests: 1000,
+                    overagePriceCents: 250,
+                },
+                {
+                    id: 'seller-1',
+                    email: 'seller@example.com',
+                    role: Role.SELLER,
+                },
+            ),
+        ).rejects.toMatchObject({
+            code: ErrorCodes.BAD_REQUEST,
+            message: 'OVERAGE_FIELDS_REQUIRE_ALLOW_OVERAGE',
         });
     });
 

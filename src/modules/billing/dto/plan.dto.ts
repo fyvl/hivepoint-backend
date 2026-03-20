@@ -26,6 +26,15 @@ export class PlanDto {
     @ApiProperty({ type: Number, example: 120, nullable: true })
     rateLimitRpm!: number | null;
 
+    @ApiProperty({ example: false })
+    allowOverage!: boolean;
+
+    @ApiProperty({ type: Number, example: 1000, nullable: true })
+    overageUnitRequests!: number | null;
+
+    @ApiProperty({ type: Number, example: 250, nullable: true })
+    overagePriceCents!: number | null;
+
     @ApiProperty({ example: true })
     isActive!: boolean;
 

@@ -116,18 +116,21 @@ model ApiVersion {
 }
 
 model Plan {
-  id            String         @id @default(uuid())
-  productId     String
-  name          String
-  priceCents    Int
-  currency      String         @default("EUR")
-  period        PlanPeriod     @default(MONTH)
-  quotaRequests Int
-  rateLimitRpm  Int?
-  isActive      Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  product       ApiProduct     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  subscriptions Subscription[]
+  id                  String         @id @default(uuid())
+  productId           String
+  name                String
+  priceCents          Int
+  currency            String         @default("EUR")
+  period              PlanPeriod     @default(MONTH)
+  quotaRequests       Int
+  rateLimitRpm        Int?
+  allowOverage        Boolean        @default(false)
+  overageUnitRequests Int?
+  overagePriceCents   Int?
+  isActive            Boolean        @default(true)
+  createdAt           DateTime       @default(now())
+  product             ApiProduct     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  subscriptions       Subscription[]
 
   @@index([productId])
 }
@@ -306,3 +309,4 @@ model ProductView {
   @@index([productId, viewedAt])
   @@index([viewerUserId, viewedAt])
 }
+

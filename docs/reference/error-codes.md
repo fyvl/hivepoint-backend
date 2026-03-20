@@ -40,7 +40,7 @@ All API errors are returned in a unified format:
 | `MOCK_PAYMENT_FORBIDDEN` | 403 | Billing mock payment guard. |
 | `INVALID_API_KEY` | 401 | Gateway dispatch when `x-api-key` is invalid. |
 | `NO_ACTIVE_SUBSCRIPTION` | 403 | Gateway dispatch when the API key owner has no active subscription for the product. |
-| `QUOTA_EXCEEDED` | 429 | Gateway dispatch when the request would exceed the plan quota. |
+| `QUOTA_EXCEEDED` | 429 | Gateway dispatch when the request would exceed the plan quota for a plan that does not allow overage. |
 | `RATE_LIMIT_EXCEEDED` | 429 | Gateway dispatch when the request would exceed the plan RPM limit. |
 | `GATEWAY_REQUEST_BODY_TOO_LARGE` | 413 | Gateway dispatch/proxy when the outbound request body exceeds the configured body limit. |
 | `USAGE_INGEST_FORBIDDEN` | 403 | Usage internal endpoints when `x-usage-secret` is missing or invalid. |
@@ -50,3 +50,4 @@ All API errors are returned in a unified format:
 | `GATEWAY_TARGET_NOT_CONFIGURED` | 502 | Gateway dispatch when no upstream base URL can be resolved from the stored OpenAPI snapshot. |
 | `GATEWAY_UPSTREAM_UNAVAILABLE` | 502 | Gateway dispatch when the upstream request fails or times out. |
 | `GATEWAY_RESPONSE_BODY_TOO_LARGE` | 502 | Gateway dispatch/proxy when the buffered upstream response body exceeds the configured limit. |
+

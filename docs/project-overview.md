@@ -20,7 +20,7 @@ HivePoint is a NestJS backend for a marketplace of API products. It supports use
 **Still out of scope (`Production` backlog)**
 
 - Customizable gateway rate policies beyond the current RPM-derived shared burst limiter, plus fuller reverse-proxy streaming support.
-- Flexible overage/pay-per-use billing policies.
+- Automated invoicing/collection for overage and pure pay-per-use billing policies.
 - Custom renewal retry policies beyond the payment provider's built-in dunning behavior.
 - Per-endpoint and richer usage read models beyond the current subscription-level daily aggregate.
 - Long-term metrics storage, richer dashboard drill-downs, and multi-sink external alert routing beyond the current admin ops dashboard plus webhook delivery.
@@ -49,12 +49,12 @@ HivePoint is a modular monolith: each domain lives in its own Nest module, but a
 ## Key domain concepts
 
 - **ApiProduct / ApiVersion**: seller-owned API products and their versions, with status-based visibility.
-- **Plan / Subscription / Invoice**: plans define pricing and quota, subscriptions represent buyer access, invoices track billing periods and status.
+- **Plan / Subscription / Invoice**: plans define pricing, included quota, optional overage policy, subscriptions represent buyer access, and invoices track billing periods and status.
 - **ApiKey**: per-user API keys; raw key is returned only on creation and stored as a hash.
 - **Gateway / entitlement**: gateway dispatch and proxy routes validate API key + product + quota, enforce the plan RPM policy plus a Postgres-backed shared burst limiter, apply payload/time limits, forward the call to the seller-hosted upstream resolved from the latest published OpenAPI snapshot, stream SSE/NDJSON proxy responses, and consume usage once gateway policy checks pass.
-- **Usage metering**: internal usage records per subscription, queue-backed ingestion for async persistence, and subscription-level daily aggregates used by quota and summary reads.
+- **Usage metering**: internal usage records per subscription, queue-backed ingestion for async persistence, subscription-level daily aggregates used by quota and summary reads, and projected overage calculations for overage-enabled plans.
 - **ProductView / seller analytics**: product detail reads are tracked and aggregated into seller-facing beta analytics.
-- **Buyer alerts**: billing and usage state are materialized into buyer-facing alerts for quota pressure, renewals, payment issues, and new API versions.
+- **Buyer alerts**: billing and usage state are materialized into buyer-facing alerts for quota pressure, active overage, renewals, payment issues, and new API versions.
 - **Observability**: every HTTP request gets a request ID, structured request log entry, and in-memory HTTP metrics; `GET /metrics` exposes Prometheus-style metrics; `GET /admin/ops/dashboard` surfaces the operational metrics snapshot, derived alerts, and alert delivery status; active alerts can be pushed to an external webhook with reminder cooldown; and admin moderation actions are persisted to `AuditLog`.
 
 ## Security model
@@ -72,7 +72,7 @@ Key entities and relationships:
 
 - **User**: has many `RefreshToken`, `ApiKey`, `Subscription`, `ApiProduct`, `ProductView`.
 - **ApiProduct**: belongs to `User`, has many `ApiVersion`, `Plan`, and `ProductView`.
-- **Plan**: belongs to `ApiProduct`, has many `Subscription`.
+- **Plan**: belongs to `ApiProduct`, has many `Subscription`, and can optionally define overage billing increments via `allowOverage`, `overageUnitRequests`, and `overagePriceCents`.
 - **Subscription**: belongs to `User` and `Plan`, has many `Invoice`, `UsageRecord`, `UsageIngestJob`, `UsageDailyAggregate`, and `GatewayBurstBucket`.
 - **Invoice**: belongs to `Subscription`.
 - **UsageRecord**: belongs to `Subscription`.
@@ -121,5 +121,6 @@ How to run:
 - Long-term observability storage, richer ops drill-downs, multi-sink alert routing, and broader ops tooling on top of the current metrics, traces, webhook delivery, and audit logs.
 - Admin UI and seller ops UI.
 - Broader reverse-proxy streaming support and customizable gateway rate policies beyond the current shared burst limiter.
+
 
 

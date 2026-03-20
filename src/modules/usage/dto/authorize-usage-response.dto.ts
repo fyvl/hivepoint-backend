@@ -22,6 +22,15 @@ export class UsageAuthorizationPlanDto {
 
     @ApiProperty({ type: Number, example: 120, nullable: true })
     rateLimitRpm!: number | null;
+
+    @ApiProperty({ example: false })
+    allowOverage!: boolean;
+
+    @ApiProperty({ type: Number, example: 1000, nullable: true })
+    overageUnitRequests!: number | null;
+
+    @ApiProperty({ type: Number, example: 250, nullable: true })
+    overagePriceCents!: number | null;
 }
 
 export class UsageAuthorizationProductDto {
@@ -71,6 +80,21 @@ export class AuthorizeUsageResponseDto {
 
     @ApiPropertyOptional({ type: Number, example: 52, nullable: true })
     remainingRateLimitRequests?: number | null;
+
+    @ApiPropertyOptional({ example: false })
+    overageEnabled?: boolean;
+
+    @ApiPropertyOptional({ type: Number, example: 1000, nullable: true })
+    overageUnitRequests?: number | null;
+
+    @ApiPropertyOptional({ type: Number, example: 250, nullable: true })
+    overagePriceCents?: number | null;
+
+    @ApiPropertyOptional({ example: 200 })
+    projectedOverageRequests?: number;
+
+    @ApiPropertyOptional({ example: 250 })
+    projectedOverageAmountCents?: number;
 
     @ApiPropertyOptional({ example: false })
     usageRecorded?: boolean;

@@ -81,6 +81,9 @@ export class UsageService {
                         name: true,
                         quotaRequests: true,
                         rateLimitRpm: true,
+                        allowOverage: true,
+                        overageUnitRequests: true,
+                        overagePriceCents: true,
                         product: {
                             select: {
                                 id: true,
@@ -122,6 +125,10 @@ export class UsageService {
                               Math.floor((usedRequests / quotaRequests) * 100),
                           )
                         : 0;
+                const overageState = this.getOverageState(
+                    subscription.plan,
+                    usedRequests,
+                );
 
                 return {
                     subscriptionId: subscription.id,
@@ -132,12 +139,8 @@ export class UsageService {
                     usedRequests,
                     quotaRequests,
                     percent,
-                    plan: {
-                        id: subscription.plan.id,
-                        name: subscription.plan.name,
-                        quotaRequests: subscription.plan.quotaRequests,
-                        rateLimitRpm: subscription.plan.rateLimitRpm,
-                    },
+                    ...overageState,
+                    plan: this.serializePlan(subscription.plan),
                     product: {
                         id: subscription.plan.product.id,
                         title: subscription.plan.product.title,
@@ -244,6 +247,9 @@ export class UsageService {
                         name: true,
                         quotaRequests: true,
                         rateLimitRpm: true,
+                        allowOverage: true,
+                        overageUnitRequests: true,
+                        overagePriceCents: true,
                         product: {
                             select: {
                                 id: true,
@@ -301,10 +307,18 @@ export class UsageService {
         const quotaRequests = subscription.plan.quotaRequests;
         const requestedRequests = input.requestCount;
         const nextUsedRequests = usedRequests + requestedRequests;
+        const currentOverageState = this.getOverageState(
+            subscription.plan,
+            usedRequests,
+        );
+        const projectedOverageState = this.getOverageState(
+            subscription.plan,
+            nextUsedRequests,
+        );
         const rateLimitRpm = subscription.plan.rateLimitRpm ?? null;
         let remainingRateLimitRequests: number | null = null;
 
-        if (nextUsedRequests > quotaRequests) {
+        if (!subscription.plan.allowOverage && nextUsedRequests > quotaRequests) {
             return {
                 allowed: false,
                 reason: 'QUOTA_EXCEEDED',
@@ -319,13 +333,9 @@ export class UsageService {
                 remainingRequests: Math.max(0, quotaRequests - usedRequests),
                 rateLimitRpm,
                 remainingRateLimitRequests,
+                ...this.toAuthorizeOverageState(currentOverageState),
                 usageRecorded: false,
-                plan: {
-                    id: subscription.plan.id,
-                    name: subscription.plan.name,
-                    quotaRequests: subscription.plan.quotaRequests,
-                    rateLimitRpm: subscription.plan.rateLimitRpm,
-                },
+                plan: this.serializePlan(subscription.plan),
                 product: subscription.plan.product,
             };
         }
@@ -373,13 +383,9 @@ export class UsageService {
                     ),
                     rateLimitRpm,
                     remainingRateLimitRequests,
+                    ...this.toAuthorizeOverageState(currentOverageState),
                     usageRecorded: false,
-                    plan: {
-                        id: subscription.plan.id,
-                        name: subscription.plan.name,
-                        quotaRequests: subscription.plan.quotaRequests,
-                        rateLimitRpm: subscription.plan.rateLimitRpm,
-                    },
+                    plan: this.serializePlan(subscription.plan),
                     product: subscription.plan.product,
                 };
             }
@@ -398,13 +404,9 @@ export class UsageService {
             remainingRequests: Math.max(0, quotaRequests - usedRequests),
             rateLimitRpm,
             remainingRateLimitRequests,
+            ...this.toAuthorizeOverageState(projectedOverageState),
             usageRecorded: false,
-            plan: {
-                id: subscription.plan.id,
-                name: subscription.plan.name,
-                quotaRequests: subscription.plan.quotaRequests,
-                rateLimitRpm: subscription.plan.rateLimitRpm,
-            },
+            plan: this.serializePlan(subscription.plan),
             product: subscription.plan.product,
         };
     }
@@ -469,6 +471,9 @@ export class UsageService {
                             name: true,
                             quotaRequests: true,
                             rateLimitRpm: true,
+                            allowOverage: true,
+                            overageUnitRequests: true,
+                            overagePriceCents: true,
                             product: {
                                 select: {
                                     id: true,
@@ -527,10 +532,18 @@ export class UsageService {
                 );
             const quotaRequests = subscription.plan.quotaRequests;
             const nextUsedRequests = usedRequests + params.requestCount;
+            const currentOverageState = this.getOverageState(
+                subscription.plan,
+                usedRequests,
+            );
+            const projectedOverageState = this.getOverageState(
+                subscription.plan,
+                nextUsedRequests,
+            );
             const rateLimitRpm = subscription.plan.rateLimitRpm ?? null;
             let remainingRateLimitRequests: number | null = null;
 
-            if (nextUsedRequests > quotaRequests) {
+            if (!subscription.plan.allowOverage && nextUsedRequests > quotaRequests) {
                 return {
                     allowed: false,
                     reason: 'QUOTA_EXCEEDED',
@@ -548,13 +561,9 @@ export class UsageService {
                     ),
                     rateLimitRpm,
                     remainingRateLimitRequests,
+                    ...this.toAuthorizeOverageState(currentOverageState),
                     usageRecorded: false,
-                    plan: {
-                        id: subscription.plan.id,
-                        name: subscription.plan.name,
-                        quotaRequests: subscription.plan.quotaRequests,
-                        rateLimitRpm: subscription.plan.rateLimitRpm,
-                    },
+                    plan: this.serializePlan(subscription.plan),
                     product: subscription.plan.product,
                 };
             }
@@ -604,13 +613,9 @@ export class UsageService {
                         ),
                         rateLimitRpm,
                         remainingRateLimitRequests,
+                        ...this.toAuthorizeOverageState(currentOverageState),
                         usageRecorded: false,
-                        plan: {
-                            id: subscription.plan.id,
-                            name: subscription.plan.name,
-                            quotaRequests: subscription.plan.quotaRequests,
-                            rateLimitRpm: subscription.plan.rateLimitRpm,
-                        },
+                        plan: this.serializePlan(subscription.plan),
                         product: subscription.plan.product,
                     };
                 }
@@ -644,16 +649,102 @@ export class UsageService {
                 ),
                 rateLimitRpm,
                 remainingRateLimitRequests,
+                ...this.toAuthorizeOverageState(projectedOverageState),
                 usageRecorded: true,
-                plan: {
-                    id: subscription.plan.id,
-                    name: subscription.plan.name,
-                    quotaRequests: subscription.plan.quotaRequests,
-                    rateLimitRpm: subscription.plan.rateLimitRpm,
-                },
+                plan: this.serializePlan(subscription.plan),
                 product: subscription.plan.product,
             };
         });
+    }
+
+    private serializePlan(plan: {
+        id: string;
+        name: string;
+        quotaRequests: number;
+        rateLimitRpm: number | null;
+        allowOverage: boolean;
+        overageUnitRequests: number | null;
+        overagePriceCents: number | null;
+    }) {
+        return {
+            id: plan.id,
+            name: plan.name,
+            quotaRequests: plan.quotaRequests,
+            rateLimitRpm: plan.rateLimitRpm,
+            allowOverage: plan.allowOverage,
+            overageUnitRequests: plan.overageUnitRequests,
+            overagePriceCents: plan.overagePriceCents,
+        };
+    }
+
+    private getOverageState(
+        plan: {
+            quotaRequests: number;
+            allowOverage: boolean;
+            overageUnitRequests: number | null;
+            overagePriceCents: number | null;
+        },
+        usedRequests: number,
+    ): {
+        overageEnabled: boolean;
+        overageUnitRequests: number | null;
+        overagePriceCents: number | null;
+        overageRequests: number;
+        projectedOverageAmountCents: number;
+    } {
+        const overageEnabled = plan.allowOverage === true;
+        const overageUnitRequests = plan.overageUnitRequests ?? null;
+        const overagePriceCents = plan.overagePriceCents ?? null;
+
+        if (
+            !overageEnabled ||
+            !overageUnitRequests ||
+            !overagePriceCents ||
+            usedRequests <= plan.quotaRequests
+        ) {
+            return {
+                overageEnabled,
+                overageUnitRequests,
+                overagePriceCents,
+                overageRequests: 0,
+                projectedOverageAmountCents: 0,
+            };
+        }
+
+        const overageRequests = usedRequests - plan.quotaRequests;
+        const billedUnits = Math.ceil(overageRequests / overageUnitRequests);
+
+        return {
+            overageEnabled,
+            overageUnitRequests,
+            overagePriceCents,
+            overageRequests,
+            projectedOverageAmountCents:
+                billedUnits * overagePriceCents,
+        };
+    }
+
+    private toAuthorizeOverageState(state: {
+        overageEnabled: boolean;
+        overageUnitRequests: number | null;
+        overagePriceCents: number | null;
+        overageRequests: number;
+        projectedOverageAmountCents: number;
+    }): {
+        overageEnabled: boolean;
+        overageUnitRequests: number | null;
+        overagePriceCents: number | null;
+        projectedOverageRequests: number;
+        projectedOverageAmountCents: number;
+    } {
+        return {
+            overageEnabled: state.overageEnabled,
+            overageUnitRequests: state.overageUnitRequests,
+            overagePriceCents: state.overagePriceCents,
+            projectedOverageRequests: state.overageRequests,
+            projectedOverageAmountCents:
+                state.projectedOverageAmountCents,
+        };
     }
 
     private getRateLimitWindowStart(occurredAt: Date, periodStart: Date): Date {
@@ -783,3 +874,8 @@ export class UsageService {
         return hashApiKey(rawKey, salt);
     }
 }
+
+
+
+
+
