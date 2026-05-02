@@ -16,6 +16,7 @@ import {
     ApiOkResponse,
     ApiOperation,
     ApiQuery,
+    ApiResponse,
     ApiTags,
     ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -29,23 +30,28 @@ import { ZodValidationPipe } from '../../common/utils/zod-validation.pipe';
 import {
     createProductSchema,
     createVersionSchema,
+    generateProductDescriptionSchema,
     listProductsQuerySchema,
     updateProductSchema,
 } from './catalog.schemas';
 import type {
     CreateProductInput,
     CreateVersionInput,
+    GenerateProductDescriptionInput,
     ListProductsQuery,
     UpdateProductInput,
 } from './catalog.schemas';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateVersionDto } from './dto/create-version.dto';
+import { GenerateProductDescriptionDto } from './dto/generate-product-description.dto';
+import { GenerateProductDescriptionResponseDto } from './dto/generate-product-description-response.dto';
 import { ProductListResponseDto } from './dto/list-products.dto';
 import { ProductDto } from './dto/product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { VersionListResponseDto } from './dto/list-versions.dto';
 import { VersionDto } from './dto/version.dto';
 import { OptionalJwtGuard } from './guards/optional-jwt.guard';
+import { ProductDescriptionGeneratorService } from './product-description-generator.service';
 import { ProductsService } from './products.service';
 import { VersionsService } from './versions.service';
 
@@ -55,6 +61,7 @@ export class ProductsController {
     constructor(
         private readonly productsService: ProductsService,
         private readonly versionsService: VersionsService,
+        private readonly productDescriptionGeneratorService: ProductDescriptionGeneratorService,
     ) {}
 
     @Get('products')
@@ -149,6 +156,24 @@ export class ProductsController {
         @User() user: AuthenticatedUser,
     ): Promise<ProductDto> {
         return this.productsService.createProduct(body, user);
+    }
+
+    @Post('ai/product-description')
+    @UseGuards(JwtGuard, RolesGuard)
+    @Roles(Role.SELLER, Role.ADMIN)
+    @ApiBearerAuth('bearer')
+    @ApiOperation({ summary: 'Generate product description draft with LLM' })
+    @ApiBody({ type: GenerateProductDescriptionDto })
+    @ApiOkResponse({ type: GenerateProductDescriptionResponseDto })
+    @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
+    @ApiForbiddenResponse({ description: 'FORBIDDEN' })
+    @ApiResponse({ status: 503, description: 'LLM_NOT_CONFIGURED' })
+    @ApiResponse({ status: 502, description: 'LLM_UPSTREAM_UNAVAILABLE' })
+    async generateProductDescription(
+        @Body(new ZodValidationPipe(generateProductDescriptionSchema))
+        body: GenerateProductDescriptionInput,
+    ): Promise<GenerateProductDescriptionResponseDto> {
+        return this.productDescriptionGeneratorService.generate(body);
     }
 
     @Patch('products/:id')

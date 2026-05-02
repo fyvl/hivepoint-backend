@@ -368,4 +368,19 @@ describe('BillingOverageCollectionService', () => {
             failed: 0,
         });
     });
+
+    it('treats retryable lease transaction conflicts as a skipped cycle', async () => {
+        prisma.$transaction.mockRejectedValue({
+            code: 'P2034',
+        });
+
+        const result = await service.processDueOverageCollection();
+
+        expect(prisma.invoice.findMany).not.toHaveBeenCalled();
+        expect(result).toEqual({
+            materialized: 0,
+            collected: 0,
+            failed: 0,
+        });
+    });
 });

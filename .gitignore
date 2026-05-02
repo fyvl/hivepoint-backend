@@ -6,3 +6,5 @@ node_modules
 /generated/prisma
 dist
 coverage
+*.log
+npm-test.txt

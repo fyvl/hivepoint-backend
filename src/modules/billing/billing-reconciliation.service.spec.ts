@@ -230,4 +230,18 @@ describe('BillingReconciliationService', () => {
             failed: 0,
         });
     });
+
+    it('treats retryable lease transaction conflicts as a skipped cycle', async () => {
+        prisma.$transaction.mockRejectedValue({
+            code: 'P2034',
+        });
+
+        const result = await service.reconcileStripeState();
+
+        expect(prisma.subscription.findMany).not.toHaveBeenCalled();
+        expect(result).toEqual({
+            processed: 0,
+            failed: 0,
+        });
+    });
 });

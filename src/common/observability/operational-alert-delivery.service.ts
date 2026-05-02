@@ -689,6 +689,12 @@ export class OperationalAlertDeliveryService
         this.isRunning = true;
         try {
             await this.syncOperationalAlerts();
+        } catch (error) {
+            this.logger.warn(
+                `Failed to run alert delivery cycle: ${this.describeError(
+                    error,
+                )}`,
+            );
         } finally {
             this.isRunning = false;
         }

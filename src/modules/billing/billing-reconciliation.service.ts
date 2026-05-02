@@ -132,67 +132,75 @@ export class BillingReconciliationService
             now.getTime() + this.getLeaseDurationMilliseconds(),
         );
 
-        return this.prisma.$transaction(
-            async (tx) => {
-                const lease = await tx.backgroundJobLease.findUnique({
-                    where: {
-                        name: BillingReconciliationService.LEASE_NAME,
-                    },
-                    select: {
-                        ownerId: true,
-                        expiresAt: true,
-                    },
-                });
+        try {
+            return await this.prisma.$transaction(
+                async (tx) => {
+                    const lease = await tx.backgroundJobLease.findUnique({
+                        where: {
+                            name: BillingReconciliationService.LEASE_NAME,
+                        },
+                        select: {
+                            ownerId: true,
+                            expiresAt: true,
+                        },
+                    });
 
-                if (!lease) {
-                    try {
-                        await tx.backgroundJobLease.create({
-                            data: {
-                                name: BillingReconciliationService.LEASE_NAME,
-                                ownerId: this.leaseOwnerId,
-                                expiresAt,
-                            },
-                        });
+                    if (!lease) {
+                        try {
+                            await tx.backgroundJobLease.create({
+                                data: {
+                                    name: BillingReconciliationService.LEASE_NAME,
+                                    ownerId: this.leaseOwnerId,
+                                    expiresAt,
+                                },
+                            });
 
-                        return true;
-                    } catch (error) {
-                        if (
-                            error instanceof
-                                Prisma.PrismaClientKnownRequestError &&
-                            error.code === 'P2002'
-                        ) {
-                            return false;
+                            return true;
+                        } catch (error) {
+                            if (
+                                error instanceof
+                                    Prisma.PrismaClientKnownRequestError &&
+                                error.code === 'P2002'
+                            ) {
+                                return false;
+                            }
+
+                            throw error;
                         }
-
-                        throw error;
                     }
-                }
 
-                if (
-                    lease.ownerId !== this.leaseOwnerId &&
-                    lease.expiresAt > now
-                ) {
-                    return false;
-                }
+                    if (
+                        lease.ownerId !== this.leaseOwnerId &&
+                        lease.expiresAt > now
+                    ) {
+                        return false;
+                    }
 
-                const updated = await tx.backgroundJobLease.updateMany({
-                    where: {
-                        name: BillingReconciliationService.LEASE_NAME,
-                        ownerId: lease.ownerId,
-                        expiresAt: lease.expiresAt,
-                    },
-                    data: {
-                        ownerId: this.leaseOwnerId,
-                        expiresAt,
-                    },
-                });
+                    const updated = await tx.backgroundJobLease.updateMany({
+                        where: {
+                            name: BillingReconciliationService.LEASE_NAME,
+                            ownerId: lease.ownerId,
+                            expiresAt: lease.expiresAt,
+                        },
+                        data: {
+                            ownerId: this.leaseOwnerId,
+                            expiresAt,
+                        },
+                    });
 
-                return updated.count === 1;
-            },
-            {
-                isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-            },
-        );
+                    return updated.count === 1;
+                },
+                {
+                    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+                },
+            );
+        } catch (error) {
+            if (this.isRetryableTransactionError(error)) {
+                return false;
+            }
+
+            throw error;
+        }
     }
 
     private async runScheduledCycle(): Promise<void> {
@@ -203,6 +211,12 @@ export class BillingReconciliationService
         this.isRunning = true;
         try {
             await this.reconcileStripeState();
+        } catch (error) {
+            this.logger.warn(
+                `Failed to run billing reconciliation cycle: ${this.describeError(
+                    error,
+                )}`,
+            );
         } finally {
             this.isRunning = false;
         }
@@ -405,5 +419,13 @@ export class BillingReconciliationService
         }
 
         return 'Unknown reconciliation error';
+    }
+
+    private isRetryableTransactionError(error: unknown): boolean {
+        const prismaError = error as {
+            code?: string;
+        };
+
+        return prismaError?.code === 'P2034';
     }
 }

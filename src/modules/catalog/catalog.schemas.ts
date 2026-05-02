@@ -34,6 +34,12 @@ export const createProductSchema = z.object({
     tags: z.array(tagSchema).max(20),
 });
 
+export const generateProductDescriptionSchema = z.object({
+    title: z.string().trim().min(3).max(120),
+    category: z.string().trim().min(2).max(60),
+    tags: z.array(tagSchema).max(20),
+});
+
 export const updateProductSchema = createProductSchema
     .partial()
     .extend({
@@ -55,6 +61,9 @@ export const updateVersionSchema = z
 
 export type ListProductsQuery = z.infer<typeof listProductsQuerySchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
+export type GenerateProductDescriptionInput = z.infer<
+    typeof generateProductDescriptionSchema
+>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type CreateVersionInput = z.infer<typeof createVersionSchema>;
 export type UpdateVersionInput = z.infer<typeof updateVersionSchema>;

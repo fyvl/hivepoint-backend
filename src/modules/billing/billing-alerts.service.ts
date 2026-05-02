@@ -98,6 +98,7 @@ export class BillingAlertsService {
                 subscription.status === 'ACTIVE' &&
                 !subscription.cancelAtPeriodEnd &&
                 subscription.currentPeriodEnd &&
+                subscription.currentPeriodEnd >= now &&
                 subscription.currentPeriodEnd <= renewalCutoff
             ) {
                 alerts.push({

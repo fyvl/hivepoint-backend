@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "UsageEndpointDailyAggregate_subscriptionId_endpoint_bucketDate_" RENAME TO "UsageEndpointDailyAggregate_subscriptionId_endpoint_bucketD_idx";

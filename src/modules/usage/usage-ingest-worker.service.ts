@@ -255,6 +255,10 @@ export class UsageIngestWorkerService implements OnModuleInit, OnModuleDestroy {
         this.isRunning = true;
         try {
             await this.drainQueue();
+        } catch (error) {
+            this.logger.warn(
+                `Failed to run usage ingest cycle: ${this.describeError(error)}`,
+            );
         } finally {
             this.isRunning = false;
         }

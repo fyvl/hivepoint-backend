@@ -26,50 +26,58 @@ const emptyToUndefined = (value: unknown): unknown => {
     return value;
 };
 
-const intArrayFromCsv = z.preprocess((value) => {
-    if (Array.isArray(value)) {
-        return value;
-    }
+const intArrayFromCsv = z.preprocess(
+    (value) => {
+        if (Array.isArray(value)) {
+            return value;
+        }
 
-    if (typeof value !== 'string') {
-        return value;
-    }
+        if (typeof value !== 'string') {
+            return value;
+        }
 
-    return value
-        .split(',')
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
-        .map((item) => Number.parseInt(item, 10));
-}, z.array(z.number().int().positive()).default([60, 360, 1440]));
+        return value
+            .split(',')
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .map((item) => Number.parseInt(item, 10));
+    },
+    z.array(z.number().int().positive()).default([60, 360, 1440]),
+);
 
-const alertDeliveryTargetsFromString = z.preprocess((value) => {
-    if (Array.isArray(value)) {
-        return value;
-    }
+const alertDeliveryTargetsFromString = z.preprocess(
+    (value) => {
+        if (Array.isArray(value)) {
+            return value;
+        }
 
-    if (typeof value !== 'string') {
-        return value;
-    }
+        if (typeof value !== 'string') {
+            return value;
+        }
 
-    return value
-        .split(/[\r\n,;]+/)
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0)
-        .map((item) => {
-            const separatorIndex = item.indexOf('=');
-            if (separatorIndex < 0) {
+        return value
+            .split(/[\r\n,;]+/)
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .map((item) => {
+                const separatorIndex = item.indexOf('=');
+                if (separatorIndex < 0) {
+                    return {
+                        key: '',
+                        url: item,
+                    };
+                }
+
                 return {
-                    key: '',
-                    url: item,
+                    key: item.slice(0, separatorIndex).trim(),
+                    url: item.slice(separatorIndex + 1).trim(),
                 };
-            }
-
-            return {
-                key: item.slice(0, separatorIndex).trim(),
-                url: item.slice(separatorIndex + 1).trim(),
-            };
-        });
-}, z.array(z.object({ key: z.string().min(1), url: z.string().url() })).default([]));
+            });
+    },
+    z
+        .array(z.object({ key: z.string().min(1), url: z.string().url() }))
+        .default([]),
+);
 
 export const envSchema = z
     .object({
@@ -221,8 +229,27 @@ export const envSchema = z
             .int()
             .positive()
             .default(1024 * 1024),
+        LLM_BASE_URL: z.string().url().default('https://api.openai.com/v1'),
+        LLM_API_KEY: z.preprocess(
+            emptyToUndefined,
+            z.string().min(1).optional(),
+        ),
+        LLM_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+        LLM_REQUEST_TIMEOUT_MS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(15_000),
     })
     .superRefine((env, context) => {
+        if (env.LLM_API_KEY && !env.LLM_MODEL) {
+            context.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'LLM_MODEL is required when LLM_API_KEY is set',
+                path: ['LLM_MODEL'],
+            });
+        }
+
         if (
             env.ALERT_DELIVERY_ENABLED &&
             !env.ALERT_DELIVERY_WEBHOOK_URL &&

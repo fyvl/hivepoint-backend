@@ -3,6 +3,7 @@ import { JwtGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { PrismaModule } from '../../common/prisma/prisma.module';
 import { ProductsController } from './products.controller';
+import { ProductDescriptionGeneratorService } from './product-description-generator.service';
 import { ProductsService } from './products.service';
 import { VersionsController } from './versions.controller';
 import { VersionsService } from './versions.service';
@@ -14,6 +15,7 @@ import { OptionalJwtGuard } from './guards/optional-jwt.guard';
     providers: [
         ProductsService,
         VersionsService,
+        ProductDescriptionGeneratorService,
         JwtGuard,
         RolesGuard,
         OptionalJwtGuard,

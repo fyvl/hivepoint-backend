@@ -185,21 +185,22 @@ export class AppConfigService {
             });
         }
 
-        const configuredTargets =
-            this.configService.getOrThrow('ALERT_DELIVERY_TARGETS');
+        const configuredTargets = this.configService.getOrThrow(
+            'ALERT_DELIVERY_TARGETS',
+        );
         configuredTargets.forEach(
             (target: Env['ALERT_DELIVERY_TARGETS'][number]) => {
-            if (targets.some((item) => item.key === target.key)) {
-                throw new Error(
-                    `Duplicate alert delivery target key: ${target.key}`,
-                );
-            }
+                if (targets.some((item) => item.key === target.key)) {
+                    throw new Error(
+                        `Duplicate alert delivery target key: ${target.key}`,
+                    );
+                }
 
-            targets.push({
-                key: target.key,
-                url: target.url,
-                host: new URL(target.url).host,
-            });
+                targets.push({
+                    key: target.key,
+                    url: target.url,
+                    host: new URL(target.url).host,
+                });
             },
         );
 
@@ -270,5 +271,25 @@ export class AppConfigService {
         return this.configService.getOrThrow(
             'GATEWAY_RESPONSE_BODY_LIMIT_BYTES',
         );
+    }
+
+    get llmBaseUrl(): string {
+        return this.configService.getOrThrow('LLM_BASE_URL');
+    }
+
+    get llmApiKey(): string | undefined {
+        return this.configService.get('LLM_API_KEY');
+    }
+
+    get llmModel(): string | undefined {
+        return this.configService.get('LLM_MODEL');
+    }
+
+    get llmRequestTimeoutMs(): number {
+        return this.configService.getOrThrow('LLM_REQUEST_TIMEOUT_MS');
+    }
+
+    get llmConfigured(): boolean {
+        return Boolean(this.llmModel);
     }
 }
