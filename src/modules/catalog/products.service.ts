@@ -37,14 +37,41 @@ export class ProductsService {
         };
 
         if (params.search) {
-            where.title = {
-                contains: params.search,
-                mode: 'insensitive',
-            };
+            where.OR = [
+                {
+                    title: {
+                        contains: params.search,
+                        mode: 'insensitive',
+                    },
+                },
+                {
+                    description: {
+                        contains: params.search,
+                        mode: 'insensitive',
+                    },
+                },
+                {
+                    category: {
+                        contains: params.search,
+                        mode: 'insensitive',
+                    },
+                },
+                {
+                    tags: {
+                        has: params.search,
+                    },
+                },
+            ];
         }
 
         if (params.category) {
             where.category = params.category;
+        }
+
+        if (params.tag) {
+            where.tags = {
+                has: params.tag,
+            };
         }
 
         const [items, total] = await Promise.all([
@@ -82,14 +109,41 @@ export class ProductsService {
         }
 
         if (params.search) {
-            where.title = {
-                contains: params.search,
-                mode: 'insensitive',
-            };
+            where.OR = [
+                {
+                    title: {
+                        contains: params.search,
+                        mode: 'insensitive',
+                    },
+                },
+                {
+                    description: {
+                        contains: params.search,
+                        mode: 'insensitive',
+                    },
+                },
+                {
+                    category: {
+                        contains: params.search,
+                        mode: 'insensitive',
+                    },
+                },
+                {
+                    tags: {
+                        has: params.search,
+                    },
+                },
+            ];
         }
 
         if (params.category) {
             where.category = params.category;
+        }
+
+        if (params.tag) {
+            where.tags = {
+                has: params.tag,
+            };
         }
 
         const [items, total] = await Promise.all([

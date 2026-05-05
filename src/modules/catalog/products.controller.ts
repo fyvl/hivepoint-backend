@@ -69,6 +69,7 @@ export class ProductsController {
     @ApiOkResponse({ type: ProductListResponseDto })
     @ApiQuery({ name: 'search', required: false, type: String })
     @ApiQuery({ name: 'category', required: false, type: String })
+    @ApiQuery({ name: 'tag', required: false, type: String })
     @ApiQuery({ name: 'limit', required: false, type: Number })
     @ApiQuery({ name: 'offset', required: false, type: Number })
     async listProducts(
@@ -93,6 +94,7 @@ export class ProductsController {
     @ApiOkResponse({ type: ProductListResponseDto })
     @ApiQuery({ name: 'search', required: false, type: String })
     @ApiQuery({ name: 'category', required: false, type: String })
+    @ApiQuery({ name: 'tag', required: false, type: String })
     @ApiQuery({ name: 'limit', required: false, type: Number })
     @ApiQuery({ name: 'offset', required: false, type: Number })
     @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })

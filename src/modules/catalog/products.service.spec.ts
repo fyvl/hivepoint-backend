@@ -59,6 +59,79 @@ describe('ProductsService', () => {
         );
     });
 
+    it('filters products by category and tag', async () => {
+        prisma.apiProduct.findMany.mockResolvedValue([]);
+        prisma.apiProduct.count.mockResolvedValue(0);
+
+        await service.listPublicProducts({
+            category: 'payments',
+            tag: 'openapi',
+            limit: 20,
+            offset: 0,
+        });
+
+        expect(prisma.apiProduct.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    category: 'payments',
+                    tags: {
+                        has: 'openapi',
+                    },
+                }),
+            }),
+        );
+        expect(prisma.apiProduct.count).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    category: 'payments',
+                    tags: {
+                        has: 'openapi',
+                    },
+                }),
+            }),
+        );
+    });
+
+    it('searches public products across metadata and tags', async () => {
+        prisma.apiProduct.findMany.mockResolvedValue([]);
+        prisma.apiProduct.count.mockResolvedValue(0);
+
+        await service.listPublicProducts({
+            search: 'openapi',
+            limit: 20,
+            offset: 0,
+        });
+
+        expect(prisma.apiProduct.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    OR: expect.arrayContaining([
+                        expect.objectContaining({
+                            title: expect.objectContaining({
+                                contains: 'openapi',
+                            }),
+                        }),
+                        expect.objectContaining({
+                            description: expect.objectContaining({
+                                contains: 'openapi',
+                            }),
+                        }),
+                        expect.objectContaining({
+                            category: expect.objectContaining({
+                                contains: 'openapi',
+                            }),
+                        }),
+                        {
+                            tags: {
+                                has: 'openapi',
+                            },
+                        },
+                    ]),
+                }),
+            }),
+        );
+    });
+
     it('non-owner cannot update product', async () => {
         prisma.apiProduct.findUnique.mockResolvedValue({
             id: 'product-1',

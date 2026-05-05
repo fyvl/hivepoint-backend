@@ -23,6 +23,7 @@ const tagSchema = z.string().trim().min(1).max(30);
 export const listProductsQuerySchema = z.object({
     search: z.string().trim().min(1).optional(),
     category: z.string().trim().min(2).max(60).optional(),
+    tag: tagSchema.optional(),
     limit: z.preprocess(parseNumber, z.number().int().min(1)).optional(),
     offset: z.preprocess(parseNumber, z.number().int().min(0)).optional(),
 });
