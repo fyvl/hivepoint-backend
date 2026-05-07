@@ -24,14 +24,23 @@ Manages API products and their versions, with public visibility driven by status
 
 All seller/admin endpoints require `JwtGuard` + `RolesGuard` with `SELLER` or `ADMIN`.
 
-| Method | Path                              | Auth           | Request DTO                                    | Response                                | Notes                                                                            |
-| ------ | --------------------------------- | -------------- | ---------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------- |
-| GET    | `/catalog/my-products`            | Bearer + Roles | Query: `search`, `category`, `limit`, `offset` | `ProductListResponseDto`                | `SELLER` sees only own products across all statuses; `ADMIN` sees all products.  |
-| POST   | `/catalog/products`               | Bearer + Roles | `CreateProductDto`                             | `ProductDto`                            | Creates `DRAFT` product owned by current user.                                   |
-| POST   | `/catalog/ai/product-description` | Bearer + Roles | `GenerateProductDescriptionDto`                | `GenerateProductDescriptionResponseDto` | Uses the configured LLM provider to draft catalog copy from title/category/tags. |
-| PATCH  | `/catalog/products/:id`           | Bearer + Roles | `UpdateProductDto`                             | `ProductDto`                            | Owner/admin only; validates status transitions.                                  |
-| POST   | `/catalog/products/:id/versions`  | Bearer + Roles | `CreateVersionDto`                             | `VersionDto`                            | Owner/admin only; `version` must be unique per product.                          |
-| PATCH  | `/catalog/versions/:versionId`    | Bearer + Roles | `UpdateVersionDto`                             | `VersionDto`                            | Owner/admin only; validates version status transitions.                          |
+| Method | Path                                | Auth           | Request DTO                          | Response                                | Notes                                                                            |
+| ------ | ----------------------------------- | -------------- | ------------------------------------ | --------------------------------------- | -------------------------------------------------------------------------------- |
+| GET    | `/catalog/my-products`              | Bearer + Roles | Query: `search`, `category`, `limit`, `offset` | `ProductListResponseDto`                | `SELLER` sees only own products across all statuses; `ADMIN` sees all products.  |
+| POST   | `/catalog/products`                 | Bearer + Roles | `CreateProductDto`                   | `ProductDto`                            | Creates `DRAFT` product owned by current user.                                   |
+| POST   | `/catalog/ai/product-description`   | Bearer + Roles | `GenerateProductDescriptionDto`      | `GenerateProductDescriptionResponseDto` | Uses the configured LLM provider to draft catalog copy from title/category/tags. |
+| POST   | `/catalog/ai/category-suggestions`  | Bearer + Roles | `SuggestProductCategoryDto`          | `SuggestProductCategoryResponseDto`     | Uses the configured ML service to suggest one category and top-k tags.           |
+| PATCH  | `/catalog/products/:id`             | Bearer + Roles | `UpdateProductDto`                   | `ProductDto`                            | Owner/admin only; validates status transitions.                                  |
+| POST   | `/catalog/products/:id/versions`    | Bearer + Roles | `CreateVersionDto`                   | `VersionDto`                            | Owner/admin only; `version` must be unique per product.                          |
+| PATCH  | `/catalog/versions/:versionId`      | Bearer + Roles | `UpdateVersionDto`                   | `VersionDto`                            | Owner/admin only; validates version status transitions.                          |
+
+## AI category and tag suggestions
+
+- `POST /catalog/ai/category-suggestions` accepts `title`, `description`, and optional `topKTags` (`1..10`, default `3`).
+- The backend proxies the request to `ML_SERVICE_URL/classify`, applies `ML_REQUEST_TIMEOUT_MS`, and returns `{ category, categoryScore, tags, method, model }`.
+- Suggestions prefill Seller Studio fields only. Product `category` and `tags` remain editable by the seller before create/update.
+- The ML taxonomy currently returns these category keys: `payments`, `communications`, `auth_identity`, `data_validation`, `ai_ml`, `geo_maps`, `finance_data`, `ecommerce_logistics`, `media_content`, `analytics_monitoring`.
+- Existing catalog product categories are still stored as strings for backward compatibility with seeded and user-created data.
 
 ## Visibility and ownership rules
 
@@ -66,3 +75,5 @@ All seller/admin endpoints require `JwtGuard` + `RolesGuard` with `SELLER` or `A
 - `VALIDATION_ERROR` (message `INVALID_STATUS_TRANSITION` or invalid payload)
 - `LLM_NOT_CONFIGURED`
 - `LLM_UPSTREAM_UNAVAILABLE`
+- `ML_SUGGESTIONS_DISABLED`
+- `ML_UPSTREAM_UNAVAILABLE`

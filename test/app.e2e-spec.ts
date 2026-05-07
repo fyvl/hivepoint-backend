@@ -14,6 +14,7 @@ import {
 } from '@prisma/client';
 import request from 'supertest';
 import { StripeClientService } from '../src/modules/billing/payment/stripe-client.service';
+import { UsageIngestWorkerService } from '../src/modules/usage/usage-ingest-worker.service';
 import { createTestApp } from './helpers/test-app';
 import { resetDb } from './helpers/db';
 
@@ -39,6 +40,7 @@ describe('E2E flows', () => {
     let sellerApiServer: Server;
     let sellerApiBaseUrl: string;
     let stripeClientService: StripeClientService;
+    let usageIngestWorkerService: UsageIngestWorkerService;
     let constructStripeWebhookEventSpy: jest.SpiedFunction<
         StripeClientService['constructWebhookEvent']
     >;
@@ -114,6 +116,7 @@ describe('E2E flows', () => {
         app = await createTestApp();
         prisma = new PrismaClient();
         stripeClientService = app.get(StripeClientService);
+        usageIngestWorkerService = app.get(UsageIngestWorkerService);
         constructStripeWebhookEventSpy = jest.spyOn(
             stripeClientService,
             'constructWebhookEvent',
@@ -531,6 +534,92 @@ describe('E2E flows', () => {
         );
     });
 
+    it('seller studio: suggests product category and tags through ml proxy', async () => {
+        const sellerEmail = uniqueEmail('seller-classification');
+        await registerUser(sellerEmail, DEFAULT_PASSWORD, Role.SELLER);
+        const { accessToken: sellerToken } = await loginUser(sellerEmail);
+        const originalFetch = global.fetch;
+        const fetchMock = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                category: 'data_validation',
+                categoryScore: 0.67,
+                tags: [
+                    { tag: 'email-validation', score: 0.8 },
+                    { tag: 'email', score: 0.72 },
+                    { tag: 'fraud', score: 0.44 },
+                ],
+                method: 'embeddings',
+                model: 'paraphrase-multilingual-MiniLM-L12-v2',
+            }),
+        });
+        global.fetch = fetchMock as typeof fetch;
+
+        try {
+            const response = await request(app.getHttpServer())
+                .post('/catalog/ai/category-suggestions')
+                .set('Authorization', `Bearer ${sellerToken}`)
+                .send({
+                    title: 'Email validation API',
+                    description:
+                        'Checks email domains, MX records, and disposable mailboxes before signup.',
+                    topKTags: 3,
+                })
+                .expect(200);
+
+            expect(response.body).toEqual({
+                category: 'data_validation',
+                categoryScore: 0.67,
+                tags: [
+                    { tag: 'email-validation', score: 0.8 },
+                    { tag: 'email', score: 0.72 },
+                    { tag: 'fraud', score: 0.44 },
+                ],
+                method: 'embeddings',
+                model: 'paraphrase-multilingual-MiniLM-L12-v2',
+            });
+            expect(fetchMock).toHaveBeenCalledWith(
+                'http://127.0.0.1:8001/classify',
+                expect.objectContaining({
+                    method: 'POST',
+                    body: JSON.stringify({
+                        title: 'Email validation API',
+                        description:
+                            'Checks email domains, MX records, and disposable mailboxes before signup.',
+                        topKTags: 3,
+                    }),
+                }),
+            );
+        } finally {
+            global.fetch = originalFetch;
+        }
+    });
+
+    it('seller studio: category suggestions require seller or admin role', async () => {
+        const buyerEmail = uniqueEmail('buyer-classification');
+        await registerUser(buyerEmail, DEFAULT_PASSWORD, Role.BUYER);
+        const { accessToken: buyerToken } = await loginUser(buyerEmail);
+
+        await request(app.getHttpServer())
+            .post('/catalog/ai/category-suggestions')
+            .send({
+                title: 'Email validation API',
+                description:
+                    'Checks email domains, MX records, and disposable mailboxes before signup.',
+            })
+            .expect(401);
+
+        await request(app.getHttpServer())
+            .post('/catalog/ai/category-suggestions')
+            .set('Authorization', `Bearer ${buyerToken}`)
+            .send({
+                title: 'Email validation API',
+                description:
+                    'Checks email domains, MX records, and disposable mailboxes before signup.',
+            })
+            .expect(403);
+    });
+
     it('buyer flow: subscribe -> mock succeed -> list subscriptions ACTIVE', async () => {
         const { plan } = await createSellerAndPlan();
 
@@ -663,6 +752,7 @@ describe('E2E flows', () => {
             })
             .expect(201)
             .expect({ ok: true });
+        await usageIngestWorkerService.drainQueue();
 
         const summaryResponse = await request(app.getHttpServer())
             .get('/usage/summary')
@@ -806,6 +896,7 @@ describe('E2E flows', () => {
             })
             .expect(201)
             .expect({ ok: true });
+        await usageIngestWorkerService.drainQueue();
 
         const versionTwoResponse = await request(app.getHttpServer())
             .post(`/catalog/products/${product.id}/versions`)

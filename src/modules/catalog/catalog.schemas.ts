@@ -41,6 +41,12 @@ export const generateProductDescriptionSchema = z.object({
     tags: z.array(tagSchema).max(20),
 });
 
+export const suggestProductCategorySchema = z.object({
+    title: z.string().trim().min(3).max(120),
+    description: z.string().trim().min(10).max(2000),
+    topKTags: z.number().int().min(1).max(10).optional(),
+});
+
 export const updateProductSchema = createProductSchema
     .partial()
     .extend({
@@ -64,6 +70,9 @@ export type ListProductsQuery = z.infer<typeof listProductsQuerySchema>;
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type GenerateProductDescriptionInput = z.infer<
     typeof generateProductDescriptionSchema
+>;
+export type SuggestProductCategoryInput = z.infer<
+    typeof suggestProductCategorySchema
 >;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type CreateVersionInput = z.infer<typeof createVersionSchema>;

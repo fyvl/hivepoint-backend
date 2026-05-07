@@ -240,6 +240,16 @@ export const envSchema = z
             .int()
             .positive()
             .default(15_000),
+        ML_SUGGESTIONS_ENABLED: booleanFromString.default(true),
+        ML_SERVICE_URL: z
+            .string()
+            .url()
+            .default('http://127.0.0.1:8001'),
+        ML_REQUEST_TIMEOUT_MS: z.coerce
+            .number()
+            .int()
+            .positive()
+            .default(10_000),
     })
     .superRefine((env, context) => {
         if (env.LLM_API_KEY && !env.LLM_MODEL) {

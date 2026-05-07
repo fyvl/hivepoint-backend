@@ -2,6 +2,8 @@ import {
     Body,
     Controller,
     Get,
+    HttpCode,
+    HttpStatus,
     Param,
     Patch,
     Post,
@@ -32,6 +34,7 @@ import {
     createVersionSchema,
     generateProductDescriptionSchema,
     listProductsQuerySchema,
+    suggestProductCategorySchema,
     updateProductSchema,
 } from './catalog.schemas';
 import type {
@@ -39,6 +42,7 @@ import type {
     CreateVersionInput,
     GenerateProductDescriptionInput,
     ListProductsQuery,
+    SuggestProductCategoryInput,
     UpdateProductInput,
 } from './catalog.schemas';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -47,10 +51,13 @@ import { GenerateProductDescriptionDto } from './dto/generate-product-descriptio
 import { GenerateProductDescriptionResponseDto } from './dto/generate-product-description-response.dto';
 import { ProductListResponseDto } from './dto/list-products.dto';
 import { ProductDto } from './dto/product.dto';
+import { SuggestProductCategoryDto } from './dto/suggest-product-category.dto';
+import { SuggestProductCategoryResponseDto } from './dto/suggest-product-category-response.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { VersionListResponseDto } from './dto/list-versions.dto';
 import { VersionDto } from './dto/version.dto';
 import { OptionalJwtGuard } from './guards/optional-jwt.guard';
+import { ProductCategorySuggestionService } from './product-category-suggestion.service';
 import { ProductDescriptionGeneratorService } from './product-description-generator.service';
 import { ProductsService } from './products.service';
 import { VersionsService } from './versions.service';
@@ -62,6 +69,7 @@ export class ProductsController {
         private readonly productsService: ProductsService,
         private readonly versionsService: VersionsService,
         private readonly productDescriptionGeneratorService: ProductDescriptionGeneratorService,
+        private readonly productCategorySuggestionService: ProductCategorySuggestionService,
     ) {}
 
     @Get('products')
@@ -161,6 +169,7 @@ export class ProductsController {
     }
 
     @Post('ai/product-description')
+    @HttpCode(HttpStatus.OK)
     @UseGuards(JwtGuard, RolesGuard)
     @Roles(Role.SELLER, Role.ADMIN)
     @ApiBearerAuth('bearer')
@@ -176,6 +185,25 @@ export class ProductsController {
         body: GenerateProductDescriptionInput,
     ): Promise<GenerateProductDescriptionResponseDto> {
         return this.productDescriptionGeneratorService.generate(body);
+    }
+
+    @Post('ai/category-suggestions')
+    @HttpCode(HttpStatus.OK)
+    @UseGuards(JwtGuard, RolesGuard)
+    @Roles(Role.SELLER, Role.ADMIN)
+    @ApiBearerAuth('bearer')
+    @ApiOperation({ summary: 'Suggest product category and tags with ML' })
+    @ApiBody({ type: SuggestProductCategoryDto })
+    @ApiOkResponse({ type: SuggestProductCategoryResponseDto })
+    @ApiUnauthorizedResponse({ description: 'UNAUTHORIZED' })
+    @ApiForbiddenResponse({ description: 'FORBIDDEN' })
+    @ApiResponse({ status: 503, description: 'ML_SUGGESTIONS_DISABLED' })
+    @ApiResponse({ status: 502, description: 'ML_UPSTREAM_UNAVAILABLE' })
+    async suggestProductCategory(
+        @Body(new ZodValidationPipe(suggestProductCategorySchema))
+        body: SuggestProductCategoryInput,
+    ): Promise<SuggestProductCategoryResponseDto> {
+        return this.productCategorySuggestionService.suggest(body);
     }
 
     @Patch('products/:id')

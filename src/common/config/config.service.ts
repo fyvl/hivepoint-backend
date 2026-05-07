@@ -292,4 +292,16 @@ export class AppConfigService {
     get llmConfigured(): boolean {
         return Boolean(this.llmModel);
     }
+
+    get mlSuggestionsEnabled(): boolean {
+        return this.configService.getOrThrow('ML_SUGGESTIONS_ENABLED');
+    }
+
+    get mlServiceUrl(): string {
+        return this.configService.getOrThrow('ML_SERVICE_URL');
+    }
+
+    get mlRequestTimeoutMs(): number {
+        return this.configService.getOrThrow('ML_REQUEST_TIMEOUT_MS');
+    }
 }
