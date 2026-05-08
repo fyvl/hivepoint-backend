@@ -202,7 +202,9 @@ describe('BillingManagedRetryService', () => {
         const result = await service.processDueRetries();
 
         expect(prisma.invoice.findMany).not.toHaveBeenCalled();
-        expect(stripePaymentProvider.retryInvoicePayment).not.toHaveBeenCalled();
+        expect(
+            stripePaymentProvider.retryInvoicePayment,
+        ).not.toHaveBeenCalled();
         expect(result).toEqual({
             processed: 0,
             failed: 0,

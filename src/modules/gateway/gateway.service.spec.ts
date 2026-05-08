@@ -159,11 +159,13 @@ describe('GatewayService', () => {
                 consume: false,
             }),
         );
-        expect(gatewayBurstLimiterService.checkAndConsume).toHaveBeenCalledWith({
-            key: 'sub-1',
-            requestCount: 1,
-            rateLimitRpm: 120,
-        });
+        expect(gatewayBurstLimiterService.checkAndConsume).toHaveBeenCalledWith(
+            {
+                key: 'sub-1',
+                requestCount: 1,
+                rateLimitRpm: 120,
+            },
+        );
         expect(usageService.authorizeGatewayUsage).toHaveBeenNthCalledWith(
             2,
             expect.objectContaining({
@@ -656,7 +658,9 @@ describe('GatewayService', () => {
             code: ErrorCodes.QUOTA_EXCEEDED,
         });
 
-        expect(gatewayBurstLimiterService.checkAndConsume).not.toHaveBeenCalled();
+        expect(
+            gatewayBurstLimiterService.checkAndConsume,
+        ).not.toHaveBeenCalled();
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -697,7 +701,9 @@ describe('GatewayService', () => {
             code: ErrorCodes.RATE_LIMIT_EXCEEDED,
         });
 
-        expect(gatewayBurstLimiterService.checkAndConsume).not.toHaveBeenCalled();
+        expect(
+            gatewayBurstLimiterService.checkAndConsume,
+        ).not.toHaveBeenCalled();
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -765,4 +771,3 @@ describe('GatewayService', () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 });
-

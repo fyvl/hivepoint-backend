@@ -83,24 +83,24 @@ describe('OperationalMetricsHistoryService', () => {
         expect(
             operationalMonitoringService.getMetricsSnapshot,
         ).toHaveBeenCalledWith(now);
-        expect(prisma.operationalMetricsHistoryPoint.create).toHaveBeenCalledWith(
-            {
-                data: {
-                    capturedAt: now,
-                    usageIngestPendingJobs: 12,
-                    usageIngestFailedJobs: 2,
-                    usageIngestOldestPendingAgeSeconds: 600,
-                    usageIngestLeasePresent: true,
-                    usageIngestLeaseSecondsUntilExpiry: 60,
-                    billingReconciliationLeasePresent: true,
-                    billingReconciliationLeaseSecondsUntilExpiry: 300,
-                    billingOverageCollectionLeasePresent: true,
-                    billingOverageCollectionLeaseSecondsUntilExpiry: 120,
-                    subscriptionsPastDue: 4,
-                    auditLogsLast24h: 7,
-                },
+        expect(
+            prisma.operationalMetricsHistoryPoint.create,
+        ).toHaveBeenCalledWith({
+            data: {
+                capturedAt: now,
+                usageIngestPendingJobs: 12,
+                usageIngestFailedJobs: 2,
+                usageIngestOldestPendingAgeSeconds: 600,
+                usageIngestLeasePresent: true,
+                usageIngestLeaseSecondsUntilExpiry: 60,
+                billingReconciliationLeasePresent: true,
+                billingReconciliationLeaseSecondsUntilExpiry: 300,
+                billingOverageCollectionLeasePresent: true,
+                billingOverageCollectionLeaseSecondsUntilExpiry: 120,
+                subscriptionsPastDue: 4,
+                auditLogsLast24h: 7,
             },
-        );
+        });
         expect(result).toEqual({
             captured: true,
             pruned: 2,
@@ -141,14 +141,14 @@ describe('OperationalMetricsHistoryService', () => {
 
         const result = await service.getHistorySummary(2);
 
-        expect(prisma.operationalMetricsHistoryPoint.findMany).toHaveBeenCalledWith(
-            {
-                orderBy: {
-                    capturedAt: 'desc',
-                },
-                take: 2,
+        expect(
+            prisma.operationalMetricsHistoryPoint.findMany,
+        ).toHaveBeenCalledWith({
+            orderBy: {
+                capturedAt: 'desc',
             },
-        );
+            take: 2,
+        });
         expect(result.enabled).toBe(true);
         expect(result.items[0]?.capturedAt).toEqual(
             new Date('2026-03-20T09:00:00.000Z'),

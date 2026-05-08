@@ -1,7 +1,10 @@
 import { Controller, Get, Header } from '@nestjs/common';
 import { AppConfigService } from '../config/config.service';
 import { HttpMetricsService } from './http-metrics.service';
-import { OperationalMonitoringService } from './operational-monitoring.service';
+import {
+    OperationalAlertSeverity,
+    OperationalMonitoringService,
+} from './operational-monitoring.service';
 
 @Controller()
 export class MetricsController {
@@ -14,10 +17,9 @@ export class MetricsController {
     @Get('metrics')
     @Header('content-type', 'text/plain; version=0.0.4; charset=utf-8')
     async getMetrics(): Promise<string> {
-        const [httpMetrics, snapshot] = await Promise.all([
-            this.httpMetricsService.getSnapshot(),
-            this.operationalMonitoringService.getMetricsSnapshot(),
-        ]);
+        const httpMetrics = this.httpMetricsService.getSnapshot();
+        const snapshot =
+            await this.operationalMonitoringService.getMetricsSnapshot();
         const alerts =
             this.operationalMonitoringService.deriveOperationalAlerts(snapshot);
 
@@ -176,10 +178,10 @@ export class MetricsController {
         );
 
         const activeDangerAlerts = alerts.filter(
-            (alert) => alert.severity === 'DANGER',
+            (alert) => alert.severity === OperationalAlertSeverity.DANGER,
         ).length;
         const activeWarningAlerts = alerts.filter(
-            (alert) => alert.severity === 'WARNING',
+            (alert) => alert.severity === OperationalAlertSeverity.WARNING,
         ).length;
 
         lines.push(

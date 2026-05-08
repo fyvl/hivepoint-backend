@@ -183,7 +183,8 @@ describe('BillingAlertsService', () => {
         );
         expect(
             result.items.find(
-                (item) => item.kind === BillingAlertKind.PAYMENT_RETRY_SCHEDULED,
+                (item) =>
+                    item.kind === BillingAlertKind.PAYMENT_RETRY_SCHEDULED,
             )?.message,
         ).toContain('Hivepoint will retry');
     });
@@ -266,6 +267,8 @@ describe('BillingAlertsService', () => {
         expect(result.items.map((item) => item.kind)).toEqual([
             BillingAlertKind.OVERAGE_ACTIVE,
         ]);
-        expect(result.items[0]?.message).toContain('Projected overage charges are 500 cents');
+        expect(result.items[0]?.message).toContain(
+            'Projected overage charges are 500 cents',
+        );
     });
 });

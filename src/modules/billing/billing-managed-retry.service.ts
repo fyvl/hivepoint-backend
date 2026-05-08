@@ -211,7 +211,8 @@ export class BillingManagedRetryService
                     return updated.count === 1;
                 },
                 {
-                    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+                    isolationLevel:
+                        Prisma.TransactionIsolationLevel.Serializable,
                 },
             );
         } catch (error) {
@@ -250,9 +251,11 @@ export class BillingManagedRetryService
         const attemptedAt = new Date();
 
         try {
-            const result = await this.stripePaymentProvider.retryInvoicePayment({
-                externalInvoiceId: invoice.externalInvoiceId,
-            });
+            const result = await this.stripePaymentProvider.retryInvoicePayment(
+                {
+                    externalInvoiceId: invoice.externalInvoiceId,
+                },
+            );
 
             if (result.status === 'PAID') {
                 await this.subscriptionsService.markInvoicePaid({

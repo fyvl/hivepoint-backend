@@ -177,7 +177,8 @@ export class AdminService {
     }
 
     async getOperationalDashboard(): Promise<OperationalDashboardResponseDto> {
-        const snapshot = await this.operationalMonitoringService.getMetricsSnapshot();
+        const snapshot =
+            await this.operationalMonitoringService.getMetricsSnapshot();
         const alerts =
             this.operationalMonitoringService.deriveOperationalAlerts(snapshot);
         const [alertDelivery, metricsHistory] = await Promise.all([

@@ -47,43 +47,61 @@ describe('GatewayBurstLimiterService', () => {
         } as AppConfigService;
 
         prisma = {
-            $transaction: jest.fn(async (callback: (tx: Prisma.TransactionClient) => unknown) => {
-                const tx = {
-                    gatewayBurstBucket: {
-                        findUnique: jest.fn(async () => bucket),
-                        create: jest.fn(async ({ data }: { data: BucketState }) => {
-                            if (bucket) {
-                                const error = { code: 'P2002' };
-                                throw error;
-                            }
+            $transaction: jest.fn(
+                async (callback: (tx: Prisma.TransactionClient) => unknown) => {
+                    const tx = {
+                        gatewayBurstBucket: {
+                            findUnique: jest.fn(async () => bucket),
+                            create: jest.fn(
+                                async ({ data }: { data: BucketState }) => {
+                                    if (bucket) {
+                                        const error = Object.assign(
+                                            new Error(
+                                                'Unique constraint failed',
+                                            ),
+                                            { code: 'P2002' },
+                                        );
+                                        throw error;
+                                    }
 
-                            bucket = {
-                                key: data.key,
-                                tokens: data.tokens,
-                                lastRefillAt: data.lastRefillAt,
-                            };
+                                    bucket = {
+                                        key: data.key,
+                                        tokens: data.tokens,
+                                        lastRefillAt: data.lastRefillAt,
+                                    };
 
-                            return bucket;
-                        }),
-                        update: jest.fn(async ({ data }: { data: { tokens: number; lastRefillAt: Date } }) => {
-                            if (!bucket) {
-                                throw new Error('Missing bucket');
-                            }
+                                    return bucket;
+                                },
+                            ),
+                            update: jest.fn(
+                                async ({
+                                    data,
+                                }: {
+                                    data: {
+                                        tokens: number;
+                                        lastRefillAt: Date;
+                                    };
+                                }) => {
+                                    if (!bucket) {
+                                        throw new Error('Missing bucket');
+                                    }
 
-                            bucket = {
-                                ...bucket,
-                                tokens: data.tokens,
-                                lastRefillAt: data.lastRefillAt,
-                            };
+                                    bucket = {
+                                        ...bucket,
+                                        tokens: data.tokens,
+                                        lastRefillAt: data.lastRefillAt,
+                                    };
 
-                            return bucket;
-                        }),
-                    },
-                    $executeRaw: jest.fn(async () => 1),
-                } as unknown as Prisma.TransactionClient;
+                                    return bucket;
+                                },
+                            ),
+                        },
+                        $executeRaw: jest.fn(async () => 1),
+                    } as unknown as Prisma.TransactionClient;
 
-                return callback(tx);
-            }),
+                    return callback(tx);
+                },
+            ),
         } as unknown as PrismaService;
 
         service = new GatewayBurstLimiterService(prisma, configService);
@@ -197,7 +215,9 @@ describe('GatewayBurstLimiterService', () => {
 
         (prisma.$transaction as jest.Mock).mockImplementationOnce(async () => {
             hasThrownConflict = true;
-            throw { code: 'P2034' };
+            throw Object.assign(new Error('Serializable conflict'), {
+                code: 'P2034',
+            });
         });
 
         const result = await service.checkAndConsume({

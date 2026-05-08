@@ -241,19 +241,21 @@ describe('UsageAggregationService', () => {
             periodEnd: new Date('2026-03-04T06:00:00.000Z'),
         });
 
-        expect(prisma.usageEndpointDailyAggregate.groupBy).toHaveBeenCalledWith({
-            by: ['endpoint'],
-            where: {
-                subscriptionId: 'sub-1',
-                bucketDate: {
-                    gte: new Date('2026-03-02T00:00:00.000Z'),
-                    lt: new Date('2026-03-04T00:00:00.000Z'),
+        expect(prisma.usageEndpointDailyAggregate.groupBy).toHaveBeenCalledWith(
+            {
+                by: ['endpoint'],
+                where: {
+                    subscriptionId: 'sub-1',
+                    bucketDate: {
+                        gte: new Date('2026-03-02T00:00:00.000Z'),
+                        lt: new Date('2026-03-04T00:00:00.000Z'),
+                    },
+                },
+                _sum: {
+                    requestCount: true,
                 },
             },
-            _sum: {
-                requestCount: true,
-            },
-        });
+        );
         expect(result).toEqual([
             {
                 endpoint: '/v1/search',

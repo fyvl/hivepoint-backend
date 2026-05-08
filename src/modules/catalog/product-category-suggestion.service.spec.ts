@@ -104,7 +104,8 @@ describe('ProductCategorySuggestionService', () => {
         await expect(
             service.suggest({
                 title: 'Payments API',
-                description: 'Accept card payments and recurring subscriptions.',
+                description:
+                    'Accept card payments and recurring subscriptions.',
             }),
         ).rejects.toMatchObject({
             code: ErrorCodes.ML_SUGGESTIONS_DISABLED,

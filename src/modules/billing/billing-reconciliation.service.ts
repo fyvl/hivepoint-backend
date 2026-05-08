@@ -191,7 +191,8 @@ export class BillingReconciliationService
                     return updated.count === 1;
                 },
                 {
-                    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+                    isolationLevel:
+                        Prisma.TransactionIsolationLevel.Serializable,
                 },
             );
         } catch (error) {
@@ -266,9 +267,8 @@ export class BillingReconciliationService
             return;
         }
 
-        const allowMetadataInvoiceId = this.shouldAllowMetadataInvoiceId(
-            latestInvoice,
-        );
+        const allowMetadataInvoiceId =
+            this.shouldAllowMetadataInvoiceId(latestInvoice);
         const metadataInvoiceId = this.resolveMetadataInvoiceId(
             latestInvoice,
             subscription.metadata ?? null,
@@ -336,10 +336,7 @@ export class BillingReconciliationService
             return InvoiceStatus.PAID;
         }
 
-        if (
-            invoice.status === 'void' ||
-            invoice.status === 'uncollectible'
-        ) {
+        if (invoice.status === 'void' || invoice.status === 'uncollectible') {
             return InvoiceStatus.VOID;
         }
 

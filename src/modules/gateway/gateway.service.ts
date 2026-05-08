@@ -162,9 +162,7 @@ export class GatewayService {
             });
 
         if (!preliminaryAuthorization.allowed) {
-            throw this.mapAuthorizationFailure(
-                preliminaryAuthorization.reason,
-            );
+            throw this.mapAuthorizationFailure(preliminaryAuthorization.reason);
         }
 
         if (!preliminaryAuthorization.subscriptionId) {
@@ -248,8 +246,7 @@ export class GatewayService {
                     burstLimit: burstLimitDecision.burstLimit,
                     remainingBurstRequests:
                         burstLimitDecision.remainingBurstRequests,
-                    burstWindowSeconds:
-                        burstLimitDecision.burstWindowSeconds,
+                    burstWindowSeconds: burstLimitDecision.burstWindowSeconds,
                     usageRecorded: authorization.usageRecorded === true,
                     periodEnd: authorization.periodEnd ?? null,
                 },
@@ -282,8 +279,7 @@ export class GatewayService {
                         ? authorization.rateLimitRpm
                         : null,
                 remainingRateLimitRequests:
-                    typeof authorization.remainingRateLimitRequests ===
-                    'number'
+                    typeof authorization.remainingRateLimitRequests === 'number'
                         ? authorization.remainingRateLimitRequests
                         : null,
                 burstLimit: burstLimitDecision.burstLimit,
@@ -603,7 +599,11 @@ export class GatewayService {
         }
 
         if (ArrayBuffer.isView(body)) {
-            return new Uint8Array(body.buffer, body.byteOffset, body.byteLength) as unknown as BodyInit;
+            return new Uint8Array(
+                body.buffer,
+                body.byteOffset,
+                body.byteLength,
+            ) as unknown as BodyInit;
         }
 
         if (!requestHeaders.has('content-type')) {
@@ -797,14 +797,3 @@ export class GatewayService {
         return result;
     }
 }
-
-
-
-
-
-
-
-
-
-
-

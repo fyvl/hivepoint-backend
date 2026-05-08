@@ -328,7 +328,10 @@ export class UsageService {
         const rateLimitRpm = subscription.plan.rateLimitRpm ?? null;
         let remainingRateLimitRequests: number | null = null;
 
-        if (!subscription.plan.allowOverage && nextUsedRequests > quotaRequests) {
+        if (
+            !subscription.plan.allowOverage &&
+            nextUsedRequests > quotaRequests
+        ) {
             return {
                 allowed: false,
                 reason: 'QUOTA_EXCEEDED',
@@ -553,7 +556,10 @@ export class UsageService {
             const rateLimitRpm = subscription.plan.rateLimitRpm ?? null;
             let remainingRateLimitRequests: number | null = null;
 
-            if (!subscription.plan.allowOverage && nextUsedRequests > quotaRequests) {
+            if (
+                !subscription.plan.allowOverage &&
+                nextUsedRequests > quotaRequests
+            ) {
                 return {
                     allowed: false,
                     reason: 'QUOTA_EXCEEDED',
@@ -729,8 +735,7 @@ export class UsageService {
             overageUnitRequests,
             overagePriceCents,
             overageRequests,
-            projectedOverageAmountCents:
-                billedUnits * overagePriceCents,
+            projectedOverageAmountCents: billedUnits * overagePriceCents,
         };
     }
 
@@ -752,8 +757,7 @@ export class UsageService {
             overageUnitRequests: state.overageUnitRequests,
             overagePriceCents: state.overagePriceCents,
             projectedOverageRequests: state.overageRequests,
-            projectedOverageAmountCents:
-                state.projectedOverageAmountCents,
+            projectedOverageAmountCents: state.projectedOverageAmountCents,
         };
     }
 
@@ -884,8 +888,3 @@ export class UsageService {
         return hashApiKey(rawKey, salt);
     }
 }
-
-
-
-
-

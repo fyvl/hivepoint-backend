@@ -31,9 +31,7 @@ export type OperationalMetricsHistorySummary = {
 export class OperationalMetricsHistoryService
     implements OnModuleInit, OnModuleDestroy
 {
-    private readonly logger = new Logger(
-        OperationalMetricsHistoryService.name,
-    );
+    private readonly logger = new Logger(OperationalMetricsHistoryService.name);
     private readonly leaseOwnerId = randomUUID();
     private intervalHandle: NodeJS.Timeout | null = null;
     private isRunning = false;
@@ -98,15 +96,14 @@ export class OperationalMetricsHistoryService
                 this.configService.operationalMetricsHistoryRetentionDays,
         );
 
-        const pruned = await this.prisma.operationalMetricsHistoryPoint.deleteMany(
-            {
+        const pruned =
+            await this.prisma.operationalMetricsHistoryPoint.deleteMany({
                 where: {
                     capturedAt: {
                         lt: retentionCutoff,
                     },
                 },
-            },
-        );
+            });
 
         return {
             captured: true,

@@ -121,9 +121,8 @@ export class OperationalAlertDeliveryService
             };
         }
 
-        const alerts = await this.operationalMonitoringService.listOperationalAlerts(
-            now,
-        );
+        const alerts =
+            await this.operationalMonitoringService.listOperationalAlerts(now);
         const targets = this.configService.alertDeliveryTargets;
         const activeKinds = alerts.map((alert) => alert.kind);
         const existingStates = await this.loadRelevantStates(activeKinds);
@@ -158,7 +157,12 @@ export class OperationalAlertDeliveryService
                 now,
             );
 
-            await this.upsertObservedState(alert, fingerprint, firstObservedAt, now);
+            await this.upsertObservedState(
+                alert,
+                fingerprint,
+                firstObservedAt,
+                now,
+            );
 
             if (!shouldSend) {
                 if (targets.length === 0) {
@@ -253,10 +257,12 @@ export class OperationalAlertDeliveryService
                 take: normalizedLimit,
             }),
         ]);
-        const targets = this.configService.alertDeliveryTargets.map((target) => ({
-            key: target.key,
-            host: target.host,
-        }));
+        const targets = this.configService.alertDeliveryTargets.map(
+            (target) => ({
+                key: target.key,
+                host: target.host,
+            }),
+        );
 
         return {
             enabled: this.configService.alertDeliveryEnabled,
@@ -298,11 +304,12 @@ export class OperationalAlertDeliveryService
         activeKinds: string[],
         targetKeys: string[],
     ): Promise<OperationalAlertDeliveryTargetStateRecord[]> {
-        const clauses: Prisma.OperationalAlertDeliveryTargetStateWhereInput[] = [
-            {
-                resolvedAt: null,
-            },
-        ];
+        const clauses: Prisma.OperationalAlertDeliveryTargetStateWhereInput[] =
+            [
+                {
+                    resolvedAt: null,
+                },
+            ];
 
         if (activeKinds.length > 0) {
             clauses.push({

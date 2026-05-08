@@ -20,7 +20,9 @@ export class AnalyticsService {
         user: AuthenticatedUser,
     ): Promise<SellerAnalyticsOverviewResponseDto> {
         const windowStart = new Date();
-        windowStart.setUTCDate(windowStart.getUTCDate() - ANALYTICS_WINDOW_DAYS);
+        windowStart.setUTCDate(
+            windowStart.getUTCDate() - ANALYTICS_WINDOW_DAYS,
+        );
 
         const products = await this.prisma.apiProduct.findMany({
             where:
@@ -173,10 +175,7 @@ export class AnalyticsService {
         const pastDueClientsByProductId = new Map<string, Set<string>>();
         const failedPaymentsByProductId = new Map<string, number>();
         const requestsByProductId = new Map<string, number>();
-        const topEndpointsByProductId = new Map<
-            string,
-            Map<string, number>
-        >();
+        const topEndpointsByProductId = new Map<string, Map<string, number>>();
 
         let activeMrrCents = 0;
 
@@ -204,7 +203,9 @@ export class AnalyticsService {
                 if (!activeClientsByProductId.has(productId)) {
                     activeClientsByProductId.set(productId, new Set());
                 }
-                activeClientsByProductId.get(productId)?.add(subscription.userId);
+                activeClientsByProductId
+                    .get(productId)
+                    ?.add(subscription.userId);
             }
 
             if (subscription.status === SubscriptionStatus.PAST_DUE) {
@@ -218,7 +219,9 @@ export class AnalyticsService {
         });
 
         failedInvoices.forEach((invoice): void => {
-            const productId = planIdToProductId.get(invoice.subscription.planId);
+            const productId = planIdToProductId.get(
+                invoice.subscription.planId,
+            );
             if (!productId) {
                 return;
             }
@@ -264,9 +267,7 @@ export class AnalyticsService {
             const requests30d = requestsByProductId.get(product.id) ?? 0;
             const conversionRate30d =
                 views30d > 0
-                    ? Number(
-                          ((subscriptions30d / views30d) * 100).toFixed(1),
-                      )
+                    ? Number(((subscriptions30d / views30d) * 100).toFixed(1))
                     : 0;
             const topEndpoints = [
                 ...(topEndpointsByProductId.get(product.id)?.entries() ?? []),

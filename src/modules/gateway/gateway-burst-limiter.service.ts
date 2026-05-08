@@ -46,7 +46,8 @@ export class GatewayBurstLimiterService {
                 allowed: false,
                 burstLimit,
                 remainingBurstRequests: burstLimit,
-                burstWindowSeconds: this.configService.gatewayBurstWindowSeconds,
+                burstWindowSeconds:
+                    this.configService.gatewayBurstWindowSeconds,
                 retryAfterSeconds: null,
             };
         }
@@ -97,8 +98,7 @@ export class GatewayBurstLimiterService {
                                 retryAfterSeconds: Math.max(
                                     1,
                                     Math.ceil(
-                                        (params.requestCount -
-                                            refilledTokens) /
+                                        (params.requestCount - refilledTokens) /
                                             refillRatePerSecond,
                                     ),
                                 ),

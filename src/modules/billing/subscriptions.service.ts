@@ -688,8 +688,7 @@ export class SubscriptionsService {
                     invoice.externalCheckoutSessionId,
                 externalInvoiceId:
                     params.externalInvoiceId ?? invoice.externalInvoiceId,
-                attemptCount:
-                    params.attemptCount ?? invoice.attemptCount ?? 0,
+                attemptCount: params.attemptCount ?? invoice.attemptCount ?? 0,
                 nextPaymentAttemptAt: null,
                 ...(this.hasManagedRetryState(invoice)
                     ? clearManagedRetryState()
@@ -809,7 +808,7 @@ export class SubscriptionsService {
                         : 0),
                 nextPaymentAttemptAt:
                     invoiceStatus === InvoiceStatus.PAST_DUE
-                        ? params.nextPaymentAttemptAt ?? null
+                        ? (params.nextPaymentAttemptAt ?? null)
                         : null,
                 ...(managedRetryState ?? {}),
             },
@@ -1022,10 +1021,10 @@ export class SubscriptionsService {
     ): boolean {
         return Boolean(
             (invoice.managedRetryCount ?? 0) > 0 ||
-                invoice.managedNextRetryAt ||
-                invoice.managedLastRetryAt ||
-                invoice.managedRetryExhaustedAt ||
-                invoice.managedLastRetryError,
+            invoice.managedNextRetryAt ||
+            invoice.managedLastRetryAt ||
+            invoice.managedRetryExhaustedAt ||
+            invoice.managedLastRetryError,
         );
     }
 
@@ -1139,5 +1138,3 @@ export class SubscriptionsService {
         return invoice.id;
     }
 }
-
-

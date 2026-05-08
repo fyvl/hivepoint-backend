@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { AppConfigService } from '../config/config.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -304,10 +303,14 @@ describe('OperationalAlertDeliveryService', () => {
             },
         ]);
         prisma.operationalAlertState.update.mockResolvedValue({});
-        prisma.operationalAlertDeliveryTargetState.updateMany.mockResolvedValue({
-            count: 1,
-        });
-        operationalMonitoringService.listOperationalAlerts.mockResolvedValue([]);
+        prisma.operationalAlertDeliveryTargetState.updateMany.mockResolvedValue(
+            {
+                count: 1,
+            },
+        );
+        operationalMonitoringService.listOperationalAlerts.mockResolvedValue(
+            [],
+        );
 
         const result = await service.syncOperationalAlerts(now);
 

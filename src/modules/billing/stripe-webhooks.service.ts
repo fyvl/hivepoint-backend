@@ -144,9 +144,8 @@ export class StripeWebhooksService {
             typeof invoiceDetails?.subscription === 'string'
                 ? invoiceDetails.subscription
                 : undefined;
-        const allowMetadataInvoiceId = this.shouldAllowMetadataInvoiceId(
-            invoice,
-        );
+        const allowMetadataInvoiceId =
+            this.shouldAllowMetadataInvoiceId(invoice);
         const metadataInvoiceId = await this.resolveMetadataInvoiceId(
             invoice,
             externalSubscriptionId,

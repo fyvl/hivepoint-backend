@@ -185,9 +185,9 @@ export class AppConfigService {
             });
         }
 
-        const configuredTargets = this.configService.getOrThrow(
-            'ALERT_DELIVERY_TARGETS',
-        );
+        const configuredTargets = this.configService.getOrThrow<
+            Env['ALERT_DELIVERY_TARGETS']
+        >('ALERT_DELIVERY_TARGETS');
         configuredTargets.forEach(
             (target: Env['ALERT_DELIVERY_TARGETS'][number]) => {
                 if (targets.some((item) => item.key === target.key)) {

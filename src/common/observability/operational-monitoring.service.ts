@@ -292,8 +292,7 @@ export class OperationalMonitoringService {
                 message:
                     'Automated overage collection is enabled but its worker lease is missing or expired.',
                 details: {
-                    leasePresent:
-                        snapshot.billingOverageCollectionLeasePresent,
+                    leasePresent: snapshot.billingOverageCollectionLeasePresent,
                     secondsUntilExpiry:
                         snapshot.billingOverageCollectionLeaseSecondsUntilExpiry,
                 },

@@ -196,7 +196,9 @@ describe('BillingReconciliationService', () => {
         const result = await service.reconcileStripeState();
 
         expect(prisma.subscription.findMany).not.toHaveBeenCalled();
-        expect(stripeClientService.client.subscriptions.retrieve).not.toHaveBeenCalled();
+        expect(
+            stripeClientService.client.subscriptions.retrieve,
+        ).not.toHaveBeenCalled();
         expect(result).toEqual({
             processed: 0,
             failed: 0,

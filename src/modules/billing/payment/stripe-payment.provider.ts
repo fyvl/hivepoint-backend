@@ -189,26 +189,21 @@ export class StripePaymentProvider implements PaymentProvider {
             },
         });
 
-        let invoice: Stripe.Invoice;
-        try {
-            invoice = await this.stripeClientService.client.invoices.create({
-                customer: customerId,
-                ...(params.externalSubscriptionId
-                    ? {
-                          subscription: params.externalSubscriptionId,
-                      }
-                    : {}),
-                auto_advance: false,
-                collection_method: 'charge_automatically',
-                metadata: {
-                    invoiceId: params.invoiceId,
-                    periodStart: params.periodStart.toISOString(),
-                    periodEnd: params.periodEnd.toISOString(),
-                },
-            });
-        } catch (error) {
-            throw error;
-        }
+        let invoice = await this.stripeClientService.client.invoices.create({
+            customer: customerId,
+            ...(params.externalSubscriptionId
+                ? {
+                      subscription: params.externalSubscriptionId,
+                  }
+                : {}),
+            auto_advance: false,
+            collection_method: 'charge_automatically',
+            metadata: {
+                invoiceId: params.invoiceId,
+                periodStart: params.periodStart.toISOString(),
+                periodEnd: params.periodEnd.toISOString(),
+            },
+        });
 
         try {
             if (invoice.status === 'draft') {
@@ -223,7 +218,7 @@ export class StripePaymentProvider implements PaymentProvider {
                     invoice.id,
                 );
             }
-        } catch (error) {
+        } catch {
             invoice = await this.stripeClientService.client.invoices.retrieve(
                 invoice.id,
             );
@@ -358,7 +353,9 @@ export class StripePaymentProvider implements PaymentProvider {
         return subscription.customer;
     }
 
-    private toInvoiceResult(invoice: Stripe.Invoice): RetryInvoicePaymentResult {
+    private toInvoiceResult(
+        invoice: Stripe.Invoice,
+    ): RetryInvoicePaymentResult {
         const externalSubscriptionId =
             this.extractExternalSubscriptionId(invoice);
 
@@ -384,10 +381,7 @@ export class StripePaymentProvider implements PaymentProvider {
             return 'PAID';
         }
 
-        if (
-            invoice.status === 'void' ||
-            invoice.status === 'uncollectible'
-        ) {
+        if (invoice.status === 'void' || invoice.status === 'uncollectible') {
             return 'VOID';
         }
 

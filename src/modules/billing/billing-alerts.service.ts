@@ -84,10 +84,9 @@ export class BillingAlertsService {
                     invoiceId: latestInvoice.id,
                     versionId: null,
                     title: `Retry scheduled for ${productTitle}`,
-                    message:
-                        latestInvoice?.managedNextRetryAt
-                            ? `Hivepoint will retry the ${planName} renewal on ${effectiveRetryAt.toISOString()}.`
-                            : `Stripe will retry the ${planName} renewal on ${effectiveRetryAt.toISOString()}.`,
+                    message: latestInvoice?.managedNextRetryAt
+                        ? `Hivepoint will retry the ${planName} renewal on ${effectiveRetryAt.toISOString()}.`
+                        : `Stripe will retry the ${planName} renewal on ${effectiveRetryAt.toISOString()}.`,
                     actionLabel: 'Open billing',
                     actionUrl: '/billing',
                     effectiveAt: effectiveRetryAt,
@@ -236,9 +235,7 @@ export class BillingAlertsService {
 
     private async getLatestPublishedVersions(
         productIds: string[],
-    ): Promise<
-        Map<string, { id: string; version: string; createdAt: Date }>
-    > {
+    ): Promise<Map<string, { id: string; version: string; createdAt: Date }>> {
         if (productIds.length === 0) {
             return new Map();
         }

@@ -170,9 +170,7 @@ export class GatewayController {
                 String(result.usage.rateLimitRpm),
             );
         }
-        if (
-            typeof result.usage.remainingRateLimitRequests === 'number'
-        ) {
+        if (typeof result.usage.remainingRateLimitRequests === 'number') {
             response.setHeader(
                 'x-hivepoint-rate-limit-remaining',
                 String(result.usage.remainingRateLimitRequests),
@@ -367,5 +365,3 @@ export class GatewayController {
         return request.body;
     }
 }
-
-

@@ -45,7 +45,9 @@ describe('SubscriptionsService', () => {
     let stripePaymentProvider: jest.Mocked<PaymentProvider>;
     let configService: Pick<
         AppConfigService,
-        'billingGracePeriodDays' | 'billingManagedRetryEnabled' | 'billingManagedRetryDelaysMinutes'
+        | 'billingGracePeriodDays'
+        | 'billingManagedRetryEnabled'
+        | 'billingManagedRetryDelaysMinutes'
     >;
     let txExecuteRaw: jest.Mock;
 
@@ -217,9 +219,7 @@ describe('SubscriptionsService', () => {
             role: Role.BUYER,
         });
 
-        expect(
-            stripePaymentProvider.createPayment.mock.calls[0]?.[0],
-        ).toEqual(
+        expect(stripePaymentProvider.createPayment.mock.calls[0]?.[0]).toEqual(
             expect.objectContaining({
                 invoiceId: 'inv-setup-1',
                 subscriptionId: 'sub-setup-1',

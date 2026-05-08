@@ -1,7 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SuggestProductCategoryDto {
-    @ApiProperty({ example: 'Email validation API', minLength: 3, maxLength: 120 })
+    @ApiProperty({
+        example: 'Email validation API',
+        minLength: 3,
+        maxLength: 120,
+    })
     title!: string;
 
     @ApiProperty({

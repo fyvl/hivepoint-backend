@@ -248,9 +248,7 @@ describe('GatewayController', () => {
             })
             .expect(200);
 
-        expect(response.headers['content-type']).toContain(
-            'text/event-stream',
-        );
+        expect(response.headers['content-type']).toContain('text/event-stream');
         expect(response.headers['cache-control']).toBe('no-cache');
         expect(response.headers['x-hivepoint-subscription-id']).toBe('sub-1');
         expect(response.body).toBe('data: hello\n\n');

@@ -250,9 +250,14 @@ describe('StripePaymentProvider', () => {
             periodEnd: new Date(1775936775 * 1000),
         });
 
-        expect(
-            stripeClientService.client.invoiceItems.create,
-        ).toHaveBeenCalledWith(
+        const invoiceItemCreateCalls = (
+            stripeClientService.client.invoiceItems.create as jest.Mock
+        ).mock.calls;
+        const invoiceCreateCalls = (
+            stripeClientService.client.invoices.create as jest.Mock
+        ).mock.calls;
+
+        expect(invoiceItemCreateCalls[0][0]).toEqual(
             expect.objectContaining({
                 customer: 'cus_existing',
                 subscription: 'sub_ext_1',
@@ -260,7 +265,7 @@ describe('StripePaymentProvider', () => {
                 currency: 'eur',
             }),
         );
-        expect(stripeClientService.client.invoices.create).toHaveBeenCalledWith(
+        expect(invoiceCreateCalls[0][0]).toEqual(
             expect.objectContaining({
                 customer: 'cus_existing',
                 subscription: 'sub_ext_1',

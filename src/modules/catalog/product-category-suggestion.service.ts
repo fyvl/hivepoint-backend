@@ -133,7 +133,10 @@ export class ProductCategorySuggestionService {
         };
     }
 
-    private normalizeTag(item: MlTagSuggestion): { tag: string; score: number } {
+    private normalizeTag(item: MlTagSuggestion): {
+        tag: string;
+        score: number;
+    } {
         return {
             tag: typeof item.tag === 'string' ? item.tag : '',
             score: typeof item.score === 'number' ? item.score : 0,

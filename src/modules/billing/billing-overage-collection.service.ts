@@ -231,7 +231,8 @@ export class BillingOverageCollectionService
                     return updated.count === 1;
                 },
                 {
-                    isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+                    isolationLevel:
+                        Prisma.TransactionIsolationLevel.Serializable,
                 },
             );
         } catch (error) {
@@ -396,7 +397,8 @@ export class BillingOverageCollectionService
                                 subscriptionId: invoice.subscription.id,
                                 paymentProvider: BillingProvider.STRIPE,
                                 kind: InvoiceKind.SUBSCRIPTION,
-                                amountCents: invoice.subscription.plan.priceCents,
+                                amountCents:
+                                    invoice.subscription.plan.priceCents,
                                 currency:
                                     invoice.subscription.plan.currency ??
                                     invoice.currency,
