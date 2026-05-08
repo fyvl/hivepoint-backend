@@ -22,6 +22,7 @@ services:
             - stripe
         command:
             - listen
+            - --skip-update
             - --api-key
             - ${STRIPE_SECRET_KEY:-}
             - --forward-to

@@ -264,6 +264,7 @@ npm run start:dev
 docker compose --profile stripe up stripe-cli
 ```
 The compose profile uses the official `stripe/stripe-cli` Docker image, so a local `stripe.exe` is not required.
+The service passes `--skip-update` to avoid local startup stalls during the CLI update check.
 5) Copy the webhook signing secret printed by Stripe CLI into `STRIPE_WEBHOOK_SECRET`.
 6) Restart the backend after updating `.env`.
 7) Use Stripe test cards during checkout.
