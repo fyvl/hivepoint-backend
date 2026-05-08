@@ -4,6 +4,7 @@
 - Node.js: not pinned in the repo; use a recent LTS (18+).
 - Docker + Docker Compose (v2).
 - Optional: `psql` client, `npx prisma studio` for DB inspection.
+- Optional: `hivepoint-ml` repo for Seller Studio category/tag suggestions.
 
 ## One-time setup (clean clone)
 1) Install dependencies:
@@ -33,6 +34,9 @@ cp .env.example .env
 - `STRIPE_PORTAL_RETURN_URL`: return URL for Stripe customer portal, for example `http://localhost:5173/billing`.
 - `API_KEY_SALT`: any non-empty string (used to hash API keys).
 - `USAGE_INGEST_SECRET`: any non-empty string (used by `/usage/authorize` and `/usage/record`).
+- `ML_SUGGESTIONS_ENABLED`: defaults to `true`; set `false` to disable Seller Studio category/tag suggestions.
+- `ML_SERVICE_URL`: defaults to `http://127.0.0.1:8001`; points to the FastAPI service in `hivepoint-ml`.
+- `ML_REQUEST_TIMEOUT_MS`: outbound timeout for category/tag suggestions.
 
 ## Start infrastructure (Docker)
 ```bash
@@ -49,6 +53,22 @@ docker compose down -v
 ### Common Docker issues
 - Port conflicts (`5432`, `6379`): stop local services or change ports in `docker-compose.yml`.
 - Containers not healthy: check logs with `docker compose logs postgres` or `docker compose logs redis`.
+
+### Optional ML category/tag service
+Seller Studio category suggestions need the separate Python ML service:
+
+```powershell
+cd d:\diplom\hivepoint-ml\ml-service
+.\run_gpu.ps1
+```
+
+Health check:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8001/health
+```
+
+The backend uses `ML_SERVICE_URL/classify` and falls back to a 502 error if the service is unavailable.
 
 ## Prisma / DB setup
 ```bash
@@ -239,10 +259,11 @@ curl -s "$BASE_URL/billing/subscriptions" -H "Authorization: Bearer $ACCESS_TOKE
 ```bash
 npm run start:dev
 ```
-4) In another terminal, forward Stripe webhooks to the local backend:
+4) In another terminal, forward Stripe webhooks to the local backend through Docker Compose:
 ```bash
-stripe listen --forward-to localhost:3000/billing/stripe/webhook
+docker compose --profile stripe up stripe-cli
 ```
+The compose profile uses the official `stripe/stripe-cli` Docker image, so a local `stripe.exe` is not required.
 5) Copy the webhook signing secret printed by Stripe CLI into `STRIPE_WEBHOOK_SECRET`.
 6) Restart the backend after updating `.env`.
 7) Use Stripe test cards during checkout.

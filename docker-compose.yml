@@ -1,4 +1,3 @@
-version: '3.9'
 services:
     postgres:
         image: postgres:16-alpine
@@ -16,5 +15,18 @@ services:
         container_name: hivepoint-redis
         ports:
             - '6379:6379'
+    stripe-cli:
+        image: stripe/stripe-cli:latest
+        container_name: hivepoint-stripe-cli
+        profiles:
+            - stripe
+        command:
+            - listen
+            - --api-key
+            - ${STRIPE_SECRET_KEY:-}
+            - --forward-to
+            - http://host.docker.internal:3000/billing/stripe/webhook
+        extra_hosts:
+            - 'host.docker.internal:host-gateway'
 volumes:
     postgres_data:

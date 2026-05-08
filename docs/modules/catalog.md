@@ -38,6 +38,7 @@ All seller/admin endpoints require `JwtGuard` + `RolesGuard` with `SELLER` or `A
 
 - `POST /catalog/ai/category-suggestions` accepts `title`, `description`, and optional `topKTags` (`1..10`, default `3`).
 - The backend proxies the request to `ML_SERVICE_URL/classify`, applies `ML_REQUEST_TIMEOUT_MS`, and returns `{ category, categoryScore, tags, method, model }`.
+- The local ML implementation lives in the separate `hivepoint-ml` repo under `ml-service/` and reuses the taxonomy/research code from `ml-categorization/`.
 - Suggestions prefill Seller Studio fields only. Product `category` and `tags` remain editable by the seller before create/update.
 - The ML taxonomy currently returns these category keys: `payments`, `communications`, `auth_identity`, `data_validation`, `ai_ml`, `geo_maps`, `finance_data`, `ecommerce_logistics`, `media_content`, `analytics_monitoring`.
 - Existing catalog product categories are still stored as strings for backward compatibility with seeded and user-created data.

@@ -39,7 +39,7 @@ $ npm install
 
 ## Local setup
 
-See `docs/runbook.md` for local environment setup, Prisma migrations, and smoke tests.
+See `docs/runbook.md` for local environment setup, Prisma migrations, the external ML service, Stripe webhook forwarding, and smoke tests.
 
 ## Documentation
 
